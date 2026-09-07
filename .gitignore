@@ -1,0 +1,30 @@
+# ---- 大文件 / 可重建产物：一律不进仓库 ----
+_install/
+.vectorstore/
+models/
+.cache/
+data/_raw/
+
+# 抓取与派生数据（用 scripts/ 重建：fetch_wiki.py -> build_glossary.py -> build_l1_zh.py -> clean_l1.py）
+data/elden_ring/glossary.json
+data/elden_ring/glossary.tsv
+data/elden_ring/glossary_flat.json
+data/elden_ring/l1_wiki.jsonl
+data/elden_ring/l1_zh_game.jsonl
+data/elden_ring/l2_cheese.jsonl
+
+# ---- 本地环境 ----
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+
+# ---- 工作区私有文件（不属于项目本身）----
+.workbuddy/
+手动安装指南.md
+项目规划_v2.md
+
+# ---- 系统 ----
+Thumbs.db
+.DS_Store
