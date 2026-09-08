@@ -117,6 +117,13 @@ def load_zh2en():
     用户只会输入"玛莲妮亚"三个字，所以必须同时登记去掉称号的短名。
     """
     flat = json.loads((DATA / "glossary_flat.json").read_text(encoding="utf-8"))
+
+    # 官方术语表只覆盖本体游戏文件，DLC 内容（黄金树之影）不在其中。
+    # 手工补充 DLC 名 → 英文名，保证中文提问也能命中英文 wiki 页面。
+    alias_file = DATA / "alias_manual.json"
+    if alias_file.exists():
+        flat.update(json.loads(alias_file.read_text(encoding="utf-8")))
+
     zh2en = {}
     for en, zh in flat.items():
         zh = zh.strip()
@@ -146,7 +153,12 @@ def enhance_query(q, zh2en):
             hits.append((len(zh), zh, en))
     # 最长的先替换，避免短词抢先
     hits.sort(reverse=True)
+    injected = set()
     for _, zh, en in hits[:3]:
+        # 同一实体的称号与短名会被分别命中（"穿刺者"+"米德拉"），只注入一次
+        if en in injected:
+            continue
+        injected.add(en)
         q = q.replace(zh, f"{zh} {en}")
     return q
 
@@ -225,7 +237,17 @@ def search(col, model, query, k=FINAL_K, w_l1=W_L1, w_l2=W_L2, zh2en=None,
         tgt = (m.get("target") or "") + " " + (m.get("title_zh") or "")
         tgt_names = [t.strip() for t in re.split(r"[：:（）()，,\s]+", tgt)
                      if len(t.strip()) >= 2]
-        hit = any(t in query for t in tgt_names)
+        # 双向匹配：
+        #   正向  target 全名出现在 query 里（"玛莲妮亚怎么打"）
+        #   反向  query 里的词是 target 的后缀（"石像鬼" ⊂ "英雄石像鬼"）
+        # 只做正向时，用户省略前缀（英雄/双/老将）就匹配不上。
+        exact = any(t in query for t in tgt_names)
+        suffix = any(
+            len(t) >= 2 and t[-n:] and len(t[-n:]) >= 2 and t[-n:] in query
+            for t in tgt_names for n in (2, 3, 4))
+        # 全名命中 > 后缀命中 > 未命中。分三档是因为"龙装大树守卫"
+        # 与"大树守卫"是两个 boss，后缀命中不能享受同等置顶。
+        hit = 2.0 if exact else (1.0 if suffix else 0.0)
         l2.append({"id": res["ids"][0][i], "score_raw": 1.0 - res["distances"][0][i],
                    "meta": m, "text": doc, "target_hit": hit})
 
@@ -239,7 +261,7 @@ def search(col, model, query, k=FINAL_K, w_l1=W_L1, w_l2=W_L2, zh2en=None,
     # L2：实体命中直接置顶（base=2 保证压过一切未命中条目），
     # brain/level 意图下无脑度主导档位
     for it in l2:
-        base = 2.0 if it["target_hit"] else 0.0
+        base = it["target_hit"]
         if intent in ("brain", "level"):
             it["score"] = w_l2 * (base + it["meta"]["brain_level"] + it["score_raw"])
         else:
