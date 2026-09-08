@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""把 l2_cheese.md 中所有条目的「验证: 否」批量改为「验证: 是」。
+"""把人工层数据（L2 逃课 / L3 常规）中所有条目的「验证: 否」批量改为「验证: 是」。
 
 用法:
-    python scripts/verify_l2.py            # 预览（只打印会改哪些）
-    python scripts/verify_l2.py --apply    # 真正写入
+    python scripts/verify_l2.py                          # 预览 L2（只打印会改哪些）
+    python scripts/verify_l2.py --apply                  # 真正写入 L2
+    python scripts/verify_l2.py --file data/elden_ring/l3_normal.md --apply   # 应用到 L3
 
 只匹配 DATA-START 之后、以 "-" 开头的验证字段行，不会动说明文档和注释。
 """
@@ -11,7 +12,7 @@ import io
 import re
 import sys
 
-PATH = "data/elden_ring/l2_cheese.md"
+DEFAULT_PATH = "data/elden_ring/l2_cheese.md"
 
 # 形如:  - **验证**: 否   /  - 验证：否   /  - **验证**否
 PATTERN = re.compile(
@@ -21,7 +22,10 @@ PATTERN = re.compile(
 
 def main() -> None:
     apply = "--apply" in sys.argv
-    src = io.open(PATH, encoding="utf-8").read()
+    path = DEFAULT_PATH
+    if "--file" in sys.argv:
+        path = sys.argv[sys.argv.index("--file") + 1]
+    src = io.open(path, encoding="utf-8").read()
 
     marker = "<!-- DATA-START"
     idx = src.find(marker)
@@ -42,8 +46,8 @@ def main() -> None:
         print("\n(预览模式，未写入。加 --apply 生效)")
         return
 
-    io.open(PATH, "w", encoding="utf-8", newline="").write(head + new_body)
-    print("已写入:", PATH)
+    io.open(path, "w", encoding="utf-8", newline="").write(head + new_body)
+    print("已写入:", path)
 
 
 if __name__ == "__main__":
