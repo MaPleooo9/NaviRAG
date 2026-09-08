@@ -254,12 +254,18 @@ def _entity_hit(query, m) -> float:
     #   正向  target 全名出现在 query 里（"玛莲妮亚怎么打"）
     #   反向  query 里的词是 target 的后缀（"石像鬼" ⊂ "英雄石像鬼"）
     # 只做正向时，用户省略前缀（英雄/双/老将）就匹配不上。
-    exact = any(t in query for t in tgt_names)
+    # 命中词越长越具体：引号拆词后复合名会拆出短词（"“碎星将军”拉塔恩"
+    # 拆出"拉塔恩"），若短词和 7 字全名同档，"约定之王拉塔恩"的查询会被
+    # 一代目抢走 Top1。所以 exact 档内部按命中长度分级：≥4 字满档 2.0，
+    # 2-3 字给 1.5（仍高于后缀命中的 1.0）。
+    exact_lens = [len(t) for t in tgt_names if t in query]
     suffix = any(len(t[-n:]) >= 2 and t[-n:] in query
                  for t in tgt_names for n in (2, 3, 4))
     # 全名命中 > 后缀命中 > 未命中。分三档是因为"龙装大树守卫"
     # 与"大树守卫"是两个 boss，后缀命中不能享受同等置顶。
-    return 2.0 if exact else (1.0 if suffix else 0.0)
+    if exact_lens:
+        return 2.0 if max(exact_lens) >= 4 else 1.5
+    return 1.0 if suffix else 0.0
 
 
 def _recall_structured(col, emb, layer, topk, n_total, query,

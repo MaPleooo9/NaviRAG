@@ -53,8 +53,14 @@ def norm_target(s: str) -> str:
 
 
 def is_hit(meta: dict, case: dict) -> bool:
-    """这条结果算不算命中期望答案"""
-    if meta["layer"] != case["expect_layer"]:
+    """这条结果算不算命中期望答案
+
+    expect_layer 支持传列表：L3 扩充后「正常打法」命中验证过的 L3 条目
+    比命中 L1 wiki 页更好，所以这类用例期望 ["l1", "l3"] 都算对。
+    """
+    layers = case["expect_layer"]
+    layers = [layers] if isinstance(layers, str) else list(layers)
+    if meta["layer"] not in layers:
         return False
     want = norm_target(case.get("expect_target", ""))
     if not want:

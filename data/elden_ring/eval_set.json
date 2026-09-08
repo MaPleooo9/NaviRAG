@@ -6,44 +6,215 @@
     "group": "分组，用于看哪一类问题最容易翻车"
   },
   "cases": [
-    {"query": "玛莲妮亚怎么逃课", "expect_layer": "l2", "expect_target": "玛莲妮亚", "group": "逃课意图"},
-    {"query": "拉塔恩怎么逃课", "expect_layer": "l2", "expect_target": "拉塔恩", "group": "逃课意图"},
-    {"query": "大树守卫怎么逃课", "expect_layer": "l2", "expect_target": "大树守卫", "group": "逃课意图"},
-    {"query": "龙装大树守卫怎么逃课", "expect_layer": "l2", "expect_target": "龙装大树守卫", "group": "逃课意图"},
-    {"query": "熔炉骑士怎么逃课", "expect_layer": "l2", "expect_target": "熔炉骑士", "group": "逃课意图"},
-    {"query": "神皮双人组怎么逃课", "expect_layer": "l2", "expect_target": "神皮双人组", "group": "逃课意图"},
-    {"query": "王室幽魂怎么逃课", "expect_layer": "l2", "expect_target": "王室幽魂", "group": "逃课意图"},
-    {"query": "结晶人怎么逃课", "expect_layer": "l2", "expect_target": "结晶人", "group": "逃课意图"},
-    {"query": "英雄石像鬼怎么逃课", "expect_layer": "l2", "expect_target": "英雄石像鬼", "group": "逃课意图"},
-    {"query": "黑剑眷属怎么逃课", "expect_layer": "l2", "expect_target": "黑剑眷属", "group": "逃课意图"},
-    {"query": "老将尼奥怎么逃课", "expect_layer": "l2", "expect_target": "老将尼奥", "group": "逃课意图"},
-    {"query": "恶兆猎人怎么逃课", "expect_layer": "l2", "expect_target": "恶兆猎人", "group": "逃课意图"},
-    {"query": "卢恩熊怎么逃课", "expect_layer": "l2", "expect_target": "卢恩熊", "group": "逃课意图"},
-    {"query": "穿刺者米德拉怎么逃课", "expect_layer": "l2", "expect_target": "穿刺者米德拉", "group": "逃课意图"},
-    {"query": "腐烂树灵怎么逃课", "expect_layer": "l2", "expect_target": "腐烂树灵", "group": "逃课意图"},
-
-    {"query": "玛莲妮亚怎么打", "expect_layer": "l3", "expect_target": "玛莲妮亚", "group": "常规意图"},
-    {"query": "拉塔恩怎么打", "expect_layer": "l3", "expect_target": "拉塔恩", "group": "常规意图"},
-    {"query": "恶兆王蒙葛特怎么打", "expect_layer": "l3", "expect_target": "蒙葛特", "group": "常规意图"},
-    {"query": "黑剑玛利喀斯怎么打", "expect_layer": "l3", "expect_target": "玛利喀斯", "group": "常规意图"},
-    {"query": "血王蒙格怎么打", "expect_layer": "l3", "expect_target": "蒙格", "group": "常规意图"},
-
-    {"query": "玛莲妮亚不逃课怎么打", "expect_layer": "l3", "expect_target": "玛莲妮亚", "group": "否定表达"},
-    {"query": "我想学拉塔恩的正常打法", "expect_layer": "l3", "expect_target": "拉塔恩", "group": "否定表达"},
-    {"query": "不用轮椅怎么打蒙格", "expect_layer": "l3", "expect_target": "蒙格", "group": "否定表达"},
-    {"query": "大树守卫正常打法", "expect_layer": "l1", "expect_target": "大树守卫", "group": "否定表达"},
-    {"query": "熔炉骑士凭本事怎么打", "expect_layer": "l1", "expect_target": "熔炉骑士", "group": "否定表达"},
-
-    {"query": "给我最无脑的打法", "expect_layer": "l2", "expect_target": "", "group": "无脑度意图"},
-    {"query": "手残党有什么推荐", "expect_layer": "l2", "expect_target": "", "group": "无脑度意图"},
-    {"query": "有没有最简单的打法", "expect_layer": "l2", "expect_target": "", "group": "无脑度意图"},
-
-    {"query": "我60级能打大树守卫吗", "expect_layer": "l2", "expect_target": "大树守卫", "group": "等级过滤"},
-    {"query": "30级怎么逃熔炉骑士", "expect_layer": "l2", "expect_target": "熔炉骑士", "group": "等级过滤"},
-    {"query": "我80级怎么逃课拉塔恩", "expect_layer": "l2", "expect_target": "拉塔恩", "group": "等级过滤"},
-
-    {"query": "玛莲妮亚的追忆能换什么", "expect_layer": "l1", "expect_target": "玛莲妮亚", "group": "知识问答"},
-    {"query": "拉塔恩在哪个区域", "expect_layer": "l1", "expect_target": "拉塔恩", "group": "知识问答"},
-    {"query": "腐败吐息在哪里拿", "expect_layer": "l1", "expect_target": "", "group": "知识问答"}
+    {
+      "query": "玛莲妮亚怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "玛莲妮亚",
+      "group": "逃课意图"
+    },
+    {
+      "query": "拉塔恩怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "拉塔恩",
+      "group": "逃课意图"
+    },
+    {
+      "query": "大树守卫怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "大树守卫",
+      "group": "逃课意图"
+    },
+    {
+      "query": "龙装大树守卫怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "龙装大树守卫",
+      "group": "逃课意图"
+    },
+    {
+      "query": "熔炉骑士怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "熔炉骑士",
+      "group": "逃课意图"
+    },
+    {
+      "query": "神皮双人组怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "神皮双人组",
+      "group": "逃课意图"
+    },
+    {
+      "query": "王室幽魂怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "王室幽魂",
+      "group": "逃课意图"
+    },
+    {
+      "query": "结晶人怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "结晶人",
+      "group": "逃课意图"
+    },
+    {
+      "query": "英雄石像鬼怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "英雄石像鬼",
+      "group": "逃课意图"
+    },
+    {
+      "query": "黑剑眷属怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "黑剑眷属",
+      "group": "逃课意图"
+    },
+    {
+      "query": "老将尼奥怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "老将尼奥",
+      "group": "逃课意图"
+    },
+    {
+      "query": "恶兆猎人怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "恶兆猎人",
+      "group": "逃课意图"
+    },
+    {
+      "query": "卢恩熊怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "卢恩熊",
+      "group": "逃课意图"
+    },
+    {
+      "query": "穿刺者米德拉怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "穿刺者米德拉",
+      "group": "逃课意图"
+    },
+    {
+      "query": "腐烂树灵怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "腐烂树灵",
+      "group": "逃课意图"
+    },
+    {
+      "query": "玛莲妮亚怎么打",
+      "expect_layer": "l3",
+      "expect_target": "玛莲妮亚",
+      "group": "常规意图"
+    },
+    {
+      "query": "拉塔恩怎么打",
+      "expect_layer": "l3",
+      "expect_target": "拉塔恩",
+      "group": "常规意图"
+    },
+    {
+      "query": "恶兆王蒙葛特怎么打",
+      "expect_layer": "l3",
+      "expect_target": "蒙葛特",
+      "group": "常规意图"
+    },
+    {
+      "query": "黑剑玛利喀斯怎么打",
+      "expect_layer": "l3",
+      "expect_target": "玛利喀斯",
+      "group": "常规意图"
+    },
+    {
+      "query": "血王蒙格怎么打",
+      "expect_layer": "l3",
+      "expect_target": "蒙格",
+      "group": "常规意图"
+    },
+    {
+      "query": "玛莲妮亚不逃课怎么打",
+      "expect_layer": "l3",
+      "expect_target": "玛莲妮亚",
+      "group": "否定表达"
+    },
+    {
+      "query": "我想学拉塔恩的正常打法",
+      "expect_layer": "l3",
+      "expect_target": "拉塔恩",
+      "group": "否定表达"
+    },
+    {
+      "query": "不用轮椅怎么打蒙格",
+      "expect_layer": "l3",
+      "expect_target": "蒙格",
+      "group": "否定表达"
+    },
+    {
+      "query": "大树守卫正常打法",
+      "expect_layer": [
+        "l1",
+        "l3"
+      ],
+      "expect_target": "大树守卫",
+      "group": "否定表达"
+    },
+    {
+      "query": "熔炉骑士凭本事怎么打",
+      "expect_layer": [
+        "l1",
+        "l3"
+      ],
+      "expect_target": "熔炉骑士",
+      "group": "否定表达"
+    },
+    {
+      "query": "给我最无脑的打法",
+      "expect_layer": "l2",
+      "expect_target": "",
+      "group": "无脑度意图"
+    },
+    {
+      "query": "手残党有什么推荐",
+      "expect_layer": "l2",
+      "expect_target": "",
+      "group": "无脑度意图"
+    },
+    {
+      "query": "有没有最简单的打法",
+      "expect_layer": "l2",
+      "expect_target": "",
+      "group": "无脑度意图"
+    },
+    {
+      "query": "我60级能打大树守卫吗",
+      "expect_layer": "l2",
+      "expect_target": "大树守卫",
+      "group": "等级过滤"
+    },
+    {
+      "query": "30级怎么逃熔炉骑士",
+      "expect_layer": "l2",
+      "expect_target": "熔炉骑士",
+      "group": "等级过滤"
+    },
+    {
+      "query": "我80级怎么逃课拉塔恩",
+      "expect_layer": "l2",
+      "expect_target": "拉塔恩",
+      "group": "等级过滤"
+    },
+    {
+      "query": "玛莲妮亚的追忆能换什么",
+      "expect_layer": "l1",
+      "expect_target": "玛莲妮亚",
+      "group": "知识问答"
+    },
+    {
+      "query": "拉塔恩在哪个区域",
+      "expect_layer": "l1",
+      "expect_target": "拉塔恩",
+      "group": "知识问答"
+    },
+    {
+      "query": "腐败吐息在哪里拿",
+      "expect_layer": "l1",
+      "expect_target": "",
+      "group": "知识问答"
+    }
   ]
 }
