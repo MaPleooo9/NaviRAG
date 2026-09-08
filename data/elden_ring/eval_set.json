@@ -215,6 +215,228 @@
       "expect_layer": "l1",
       "expect_target": "",
       "group": "知识问答"
+    },
+    {
+      "query": "黑夜骑兵怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "黑夜骑兵",
+      "group": "逃课意图"
+    },
+    {
+      "query": "铃珠猎人怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "铃珠猎人",
+      "group": "逃课意图"
+    },
+    {
+      "query": "唤灵蜗牛怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "唤灵蜗牛",
+      "group": "逃课意图"
+    },
+    {
+      "query": "墓地影子怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "墓地影子",
+      "group": "逃课意图"
+    },
+    {
+      "query": "拉达冈的红狼怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "拉达冈的红狼",
+      "group": "逃课意图"
+    },
+    {
+      "query": "狮子混种怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "狮子混种",
+      "group": "逃课意图"
+    },
+    {
+      "query": "猎犬骑士怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "猎犬骑士",
+      "group": "逃课意图"
+    },
+    {
+      "query": "死之鸟怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "死之鸟",
+      "group": "逃课意图"
+    },
+    {
+      "query": "双石像鬼怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "英雄石像鬼",
+      "group": "口语俗称"
+    },
+    {
+      "query": "葛瑞克怎么打",
+      "expect_layer": "l3",
+      "expect_target": "接肢葛瑞克",
+      "group": "常规意图"
+    },
+    {
+      "query": "飞龙亚基尔怎么打",
+      "expect_layer": "l3",
+      "expect_target": "飞龙亚基尔",
+      "group": "常规意图"
+    },
+    {
+      "query": "蕾娜菈怎么打",
+      "expect_layer": "l3",
+      "expect_target": "满月女王蕾娜菈",
+      "group": "常规意图"
+    },
+    {
+      "query": "亵渎君王拉卡德怎么打",
+      "expect_layer": "l3",
+      "expect_target": "亵渎君王拉卡德",
+      "group": "常规意图"
+    },
+    {
+      "query": "黄金树的化身怎么打",
+      "expect_layer": "l3",
+      "expect_target": "黄金树的化身",
+      "group": "常规意图"
+    },
+    {
+      "query": "火焰巨人怎么打",
+      "expect_layer": "l3",
+      "expect_target": "火焰巨人",
+      "group": "常规意图"
+    },
+    {
+      "query": "老将尼奥怎么打",
+      "expect_layer": "l3",
+      "expect_target": "老将尼奥",
+      "group": "常规意图"
+    },
+    {
+      "query": "黑暗弃子艾丝缇怎么打",
+      "expect_layer": "l3",
+      "expect_target": "黑暗弃子艾丝缇",
+      "group": "常规意图"
+    },
+    {
+      "query": "神兽舞狮怎么打",
+      "expect_layer": "l3",
+      "expect_target": "神兽舞狮",
+      "group": "常规意图"
+    },
+    {
+      "query": "梅瑟莫怎么打",
+      "expect_layer": "l3",
+      "expect_target": "穿刺者梅瑟莫",
+      "group": "常规意图"
+    },
+    {
+      "query": "约定之王拉塔恩怎么打",
+      "expect_layer": "l3",
+      "expect_target": "约定之王拉塔恩",
+      "group": "常规意图"
+    },
+    {
+      "query": "初始之王葛孚雷怎么打",
+      "expect_layer": "l3",
+      "expect_target": "初始之王葛孚雷",
+      "group": "常规意图"
+    },
+    {
+      "query": "荷莱·露怎么打",
+      "expect_layer": "l3",
+      "expect_target": "撼地荷莱·露",
+      "group": "常规意图"
+    },
+    {
+      "query": "弗尔桑克斯怎么打",
+      "expect_layer": "l3",
+      "expect_target": "死龙弗尔桑克斯",
+      "group": "常规意图"
+    },
+    {
+      "query": "恶兆妖鬼玛尔基特怎么打",
+      "expect_layer": "l3",
+      "expect_target": "恶兆妖鬼玛尔基特",
+      "group": "常规意图"
+    },
+    {
+      "query": "神皮双人组怎么打",
+      "expect_layer": "l3",
+      "expect_target": "神皮双人组",
+      "group": "常规意图"
+    },
+    {
+      "query": "熔炉骑士怎么打",
+      "expect_layer": "l3",
+      "expect_target": "熔炉骑士",
+      "group": "常规意图"
+    },
+    {
+      "query": "葛瑞克怎么打（不逃课）",
+      "expect_layer": "l3",
+      "expect_target": "接肢葛瑞克",
+      "group": "否定表达"
+    },
+    {
+      "query": "拉卡德不用轮椅怎么打",
+      "expect_layer": "l3",
+      "expect_target": "亵渎君王拉卡德",
+      "group": "否定表达"
+    },
+    {
+      "query": "神兽舞狮正常打法",
+      "expect_layer": "l3",
+      "expect_target": "神兽舞狮",
+      "group": "否定表达"
+    },
+    {
+      "query": "有没有什么简单的逃课方法",
+      "expect_layer": "l2",
+      "expect_target": "",
+      "group": "无脑度意图"
+    },
+    {
+      "query": "推荐几个轮椅打法",
+      "expect_layer": "l2",
+      "expect_target": "",
+      "group": "无脑度意图"
+    },
+    {
+      "query": "我40级能打恶兆猎人吗",
+      "expect_layer": "l2",
+      "expect_target": "恶兆猎人",
+      "group": "等级过滤"
+    },
+    {
+      "query": "100级逃课打玛莲妮亚",
+      "expect_layer": "l2",
+      "expect_target": "玛莲妮亚",
+      "group": "等级过滤"
+    },
+    {
+      "query": "恶兆妖鬼玛尔基特在哪个区域",
+      "expect_layer": "l1",
+      "expect_target": "",
+      "group": "知识问答"
+    },
+    {
+      "query": "满月女王的追忆能换什么",
+      "expect_layer": "l1",
+      "expect_target": "",
+      "group": "知识问答"
+    },
+    {
+      "query": "大卢恩有什么用",
+      "expect_layer": "l1",
+      "expect_target": "",
+      "group": "知识问答"
+    },
+    {
+      "query": "死之鸟的弱点是什么",
+      "expect_layer": "l1",
+      "expect_target": "",
+      "group": "知识问答"
     }
   ]
 }

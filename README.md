@@ -106,7 +106,8 @@ python scripts/smoke_app.py
 - [x] Fluent 风格桌面端（QFluentWidgets 卡片气泡 + 暗色模式持久化 + 来源可展开核对）
 - [ ] L2 扩充至 100+ 条（当前 55）
 - [ ] L3 扩充至 50 条（当前 30）
-- [ ] 评估：Hit Rate / MRR，Base vs +Reranker 对比实验
+- [x] 评估：71 条人工标注问法，Hit@1 15.5%（纯向量）→ **98.6%**（线上方案），MRR 0.991，含消融与权重扫描（见 docs/eval.md）
+- [ ] 评估集持续扩充 + Reranker 对比实验
 - [ ] pywebview 桌面壳（可选实验：Windows 走系统 WebView2，零 Chromium 依赖）
 
 ## 数据说明
