@@ -16,7 +16,7 @@
 
 ## 特性
 
-- **零 GPU**：qwen2.5:3b 纯 CPU 实测 80 tok/s（i9-14900HX），250 字回答约 4.7 秒
+- **本地 GPU 推理**：qwen3:8b 在 RTX 4070 Laptop 实测 41 tok/s（直答首字 ~1s），250 字回答约 9 秒；qwen2.5:3b 可达 97 tok/s
 - **官方术语表**：从游戏文件提取 15,751 条官方中英对照（玛莲妮亚 / Malenia），中文提问自动注入英文名增强跨语言检索，回答中英双语
 - **意图路由不花 Token**：常规 / 逃课 / 无脑度排序 三种意图纯规则识别，零 LLM 调用
 - **结构化过滤**：「我 60 级能逃吗」→ 直接按 level_req 过滤；「不用召唤的」→ 按 requires 排除——这是纯向量检索做不到的
@@ -33,7 +33,7 @@ streamlit run app.py
 pip install -r requirements.txt
 
 # 2. Ollama + 模型（约 2GB）
-ollama pull qwen2.5:3b
+ollama pull qwen3:8b      # 也兼容 qwen2.5:3b（更快，质量稍低）
 
 # 3. 构建数据（依次运行，产物在 data/elden_ring/）
 python scripts/build_glossary.py    # 官方术语表（15,751 条）
@@ -91,7 +91,7 @@ python scripts/smoke_app.py
 
 | 指标 | 数值 |
 |---|---|
-| qwen2.5:3b 生成速度（热） | 80.6 tok/s |
+| qwen3:8b 生成速度（热，直答） | 41.3 tok/s（qwen2.5:3b 为 96.7） |
 | 首字延迟（冷 / 热） | 31.7s / 0.18s |
 | 生成 250 字中文 | ~4.7s |
 | 知识库规模 | 8,419 条（L1 8,334 + L2 55 + L3 30） |

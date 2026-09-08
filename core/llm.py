@@ -28,7 +28,7 @@ from typing import Iterator
 import requests
 
 DEFAULT_HOST = "http://localhost:11434"
-DEFAULT_MODEL = "qwen2.5:3b"
+DEFAULT_MODEL = "qwen3:8b"
 
 # 生成参数：攻略问答要的是"准确复述资料"而不是"自由发挥"，
 # 所以温度压到 0.3；num_predict 限长，防止 3b 模型绕圈停不下来。
@@ -131,6 +131,12 @@ class Ollama:
         """流式生成，逐段 yield 文本。
 
         抛 LLMError 表示失败，调用方负责降级。
+
+        think 参数（qwen3 系列支持）:
+            None → 不发该字段，走 Ollama 默认（qwen3 默认开思考）
+            False → 关闭思考，首字延迟从 ~8s 降到 <1s，适合攻略复述类任务
+            True → 开思考，质量略升但整体耗时翻倍
+            思考内容走独立字段，不会混进 response，客户端无需清洗。
         """
         model = model or self.model
         payload = {
@@ -142,6 +148,10 @@ class Ollama:
         }
         if system:
             payload["system"] = system
+        think = (options or {}).pop("_think", None) if options else None
+        if model.startswith("qwen3"):
+            # qwen3 在 Ollama 里默认开思考，这里显式默认关闭（攻略复述不需要推理链）
+            payload["think"] = bool(think) if think is not None else False
 
         try:
             r = self._session.post(f"{self.host}/api/generate", json=payload,
@@ -205,10 +215,17 @@ class Ollama:
 def pick_model(host: str = DEFAULT_HOST, prefer: list[str] | None = None) -> str:
     """在本机已安装的模型里挑一个能用的，优先 prefer 顺序。
 
-    用户在自己机器上跑时，模型名可能不同（qwen2.5:3b / qwen2.5:7b / llama3.2 等），
+    用户在自己机器上跑时，模型名可能不同（qwen2.5:3b / qwen3:8b / llama3.2 等），
     硬编码一个名字会直接开天窗，所以按优先级挑第一个存在的。
+    环境变量 NAVIRAG_MODEL 优先级最高，方便不改代码切换模型做对比实验。
     """
-    prefer = prefer or ["qwen2.5:3b", "qwen2.5:7b", "qwen2.5:1.5b", "llama3.2", "llama3.1"]
+    import os
+
+    env = os.environ.get("NAVIRAG_MODEL")
+    if env:
+        return env
+    prefer = prefer or ["qwen3:8b", "qwen2.5:3b", "qwen2.5:7b",
+                        "qwen2.5:1.5b", "llama3.2", "llama3.1"]
     try:
         r = requests.get(f"{host}/api/tags", timeout=3)
         r.raise_for_status()
