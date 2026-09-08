@@ -370,7 +370,62 @@ class DesktopChatWindow(FluentWindow):
         self.addSubInterface(self.interface, FluentIcon.CHAT, "问答")
 
 
+def run_rebuild():
+    """--rebuild 模式：更新攻略库（md→jsonl→重建索引），弹窗报告，不进聊天界面。
+
+    打包成 exe 后更新攻略的方式：双击「更新攻略.bat」→ 它调 NaviRAG.exe --rebuild。
+    数据外置在 exe 旁，改完 md 跑这一下就生效，不用重装 Python、不用重新打包。
+
+    打包后没有控制台，进度同时写入 exe 旁的 update_log.txt——
+    既是给弹窗攒内容，也是更新失败时唯一能回看的现场。
+    """
+    from PySide6.QtWidgets import QMessageBox
+
+    from core.retriever import ROOT
+    from rebuild import rebuild
+
+    lines: list[str] = []
+    logfile = ROOT / "update_log.txt"
+
+    class _LogWriter:
+        """把 stdout/stderr 引到日志文件：打包版没有控制台，
+        build_index 里的 print 和原生崩溃的 traceback 全靠这里落盘。"""
+
+        def write(self, s):
+            if s.strip():
+                lines.append(s.rstrip())
+                with open(logfile, "a", encoding="utf-8") as f:
+                    f.write(s if s.endswith("\n") else s + "\n")
+
+        def flush(self):
+            pass
+
+    def log(m: str):
+        lines.append(str(m))
+        with open(logfile, "a", encoding="utf-8") as f:
+            f.write(f"{m}\n")
+
+    try:
+        logfile.write_text("", encoding="utf-8")    # 每次更新覆盖旧日志
+        _stdout, _stderr = sys.stdout, sys.stderr
+        sys.stdout = sys.stderr = _LogWriter()      # 捕获 build_index 的进度 print
+        rebuild(log)
+        sys.stdout, sys.stderr = _stdout, _stderr
+        QMessageBox.information(None, "攻略库更新完成", "\n".join(lines[-40:]))
+    except Exception as e:
+        import traceback
+        with open(logfile, "a", encoding="utf-8") as f:
+            f.write(traceback.format_exc())
+        sys.stdout, sys.stderr = _stdout, _stderr
+        tail = "\n".join(lines[-20:]) or "（无更多日志）"
+        QMessageBox.critical(None, "攻略库更新失败", f"{e}\n\n{tail}")
+
+
 def main():
+    if "--rebuild" in sys.argv:
+        _ = QApplication(sys.argv)      # 弹窗必需
+        run_rebuild()
+        return
     app = QApplication(sys.argv)
     win = DesktopChatWindow()
     win.show()

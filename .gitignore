@@ -4,6 +4,8 @@ _install/
 models/
 .cache/
 data/_raw/
+dist/
+build/
 
 # 抓取与派生数据（用 scripts/ 重建：fetch_wiki.py -> build_glossary.py -> build_l1_zh.py -> clean_l1.py）
 data/elden_ring/glossary.json

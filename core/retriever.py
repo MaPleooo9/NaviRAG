@@ -24,7 +24,18 @@ from pathlib import Path
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-ROOT = Path(__file__).resolve().parent.parent
+def _app_root() -> Path:
+    """应用根目录：开发时=项目目录；PyInstaller 打包后=exe 所在目录。
+
+    打包成 exe 后 `__file__` 指向解包临时目录（_internal），
+    数据必须外置在 exe 旁边才能"改攻略不重打包"——这是方案 A 的基石。
+    """
+    if getattr(sys, "frozen", False):          # PyInstaller 打包运行
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+ROOT = _app_root()
 DATA = ROOT / "data" / "elden_ring"
 DB_DIR = ROOT / ".vectorstore"
 

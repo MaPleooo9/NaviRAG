@@ -138,6 +138,39 @@ def build_text(it):
     return "".join(parts)
 
 
+def convert(src, out, log=print):
+    """md → jsonl 的最小管线（供打包后的 rebuild 入口复用）。
+
+    与 main() 的区别：不做花哨的统计输出，只做 解析 → 编号 → 写文件，
+    返回 (条目数, 问题列表)。src/out 接受 Path 或 str。
+    """
+    src, out = Path(src), Path(out)
+    if not src.exists():
+        raise FileNotFoundError(f"未找到源文件: {src}")
+    md = src.read_text(encoding="utf-8")
+    marker = "<!-- DATA-START"
+    if marker in md:
+        md = md.split(marker, 1)[1].split("-->", 1)[-1]
+    items = parse(md)
+    problems = []
+    for i, it in enumerate(items):
+        it["id"] = f"er_{slug(it['target_en'] or it['target'])}_{i:03d}"
+        it["text"] = build_text(it)
+        if not it["target"]:
+            problems.append(f"[{i}] 缺少目标名")
+        if not it["steps"]:
+            problems.append(f"[{i}] {it['title']}：没有步骤")
+        if not 1 <= it["brain_level"] <= 5:
+            problems.append(f"[{i}] {it['title']}：无脑度异常 ({it['brain_level']})")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w", encoding="utf-8") as f:
+        for it in items:
+            f.write(json.dumps(it, ensure_ascii=False) + "\n")
+    log(f"  L2 逃课层: {len(items)} 条 → {out.name}"
+        + (f"（{len(problems)} 处待完善）" if problems else ""))
+    return len(items), problems
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="只检查不写文件")
