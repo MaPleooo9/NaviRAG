@@ -14,3 +14,4 @@ pyyaml
 
 # 桌面端（desktop_chat.py，二选一即可，网页版用 streamlit）
 PySide6>=6.6
+PySide6-Fluent-Widgets>=1.11

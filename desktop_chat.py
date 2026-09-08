@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-NaviRAG 桌面端：PySide6（Qt）原生窗口，不是网页。
+NaviRAG 桌面端：PySide6 + QFluentWidgets（Win11 Fluent 风格），原生窗口，不是网页。
 
 为什么单独做一个桌面壳而不是复用 app.py：
     app.py（Streamlit）是网页形态，演示"产品"用；这个桌面窗口是
@@ -11,7 +11,7 @@ NaviRAG 桌面端：PySide6（Qt）原生窗口，不是网页。
     python desktop_chat.py        # 或双击 run_desktop.bat
 
 架构（线程模型，面试可讲）:
-    主线程  —— Qt 事件循环，只做渲染（QTextBrowser 追加 HTML）
+    主线程  —— Qt 事件循环，只做渲染（卡片气泡更新）
     后台线程 —— 加载索引 / 检索 / Ollama 流式请求，通过 Qt Signal
                把结果推回主线程（跨线程 Signal 是队列投递，安全）
     好处：模型生成 30 秒窗口也不卡死；关窗即退，无残留进程。
@@ -26,11 +26,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QFont, QTextCursor
-from PySide6.QtWidgets import (
-    QApplication, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTextBrowser, QVBoxLayout, QWidget,
+from PySide6.QtCore import QSettings, QObject, Qt, Signal
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+
+from qfluentwidgets import (
+    BodyLabel, CaptionLabel, CardWidget, FluentIcon, FluentWindow,
+    IndeterminateProgressBar, InfoBar, LineEdit, PrimaryPushButton,
+    PushButton, ScrollArea, SwitchButton, Theme, TitleLabel, isDarkTheme,
+    setTheme,
 )
 
 from core.qa import QASystem  # noqa: E402
@@ -41,28 +45,21 @@ LAYER_TAG = {"l1": "L1攻略", "l2": "L2逃课", "l3": "L3常规"}
 # ---------------------------------------------------------------- 渲染工具
 
 def md_lite(text: str) -> str:
-    """模型输出的轻量 markdown → HTML（粗体 / 三级标题 / 换行）。
-
-    只处理这三样，因为 system prompt 就约束了输出是
-    「短段落 + 数字步骤 + 粗体字段」，多了反而是攻击面。
-    """
+    """模型输出的轻量 markdown → 富文本（粗体 / 标题），QLabel 直接吃。"""
     s = html.escape(text)
     s = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
     s = re.sub(r"(?m)^#{1,3}\s*(.+)$", r"<b>\1</b>", s)
     return s.replace("\n", "<br>")
 
 
-def sources_html(sources: list[dict]) -> str:
-    """来源列表 → 灰色小字 HTML。RAG 不亮出检索原文 = 让用户盲信模型。"""
+def sources_lines(sources: list[dict], with_url: bool = False) -> str:
+    """来源列表 → 多行文本。with_url=True 时附原文链接。"""
     if not sources:
         return ""
     rows = []
     for i, s in enumerate(sources, 1):
         tag = LAYER_TAG.get(s["layer"], s["layer"])
-        head = f"{i}. [{tag}] {s['title']}"
         extras = []
-        if s["target"]:
-            extras.append(f"目标 {s['target']}")
         if s["layer"] == "l2":
             extras.append(f"无脑度 {s['brain_level']}/5")
         if s["layer"] == "l3":
@@ -71,32 +68,25 @@ def sources_html(sources: list[dict]) -> str:
             extras.append(f"建议 {s['level_req']} 级")
         extras.append("✅已验证" if s["verified"] else "⚠️未验证")
         extras.append(f"得分 {s['score']}")
-        rows.append(f"{head}　" + "｜".join(extras))
-    body = "<br>".join(html.escape(r) for r in rows)
-    return (f'<span style="color:#8a8a8a;font-size:9pt;">'
-            f"📚 检索来源<br>{body}</span>")
+        line = f"{i}. [{tag}] {s['title']}　" + "｜".join(extras)
+        if with_url and s.get("url"):
+            line += f"　<a href='{html.escape(s['url'], quote=True)}'>原文</a>"
+        rows.append(line)
+    return "\n".join(rows)
 
 
 # ---------------------------------------------------------------- 后台桥
 
 class Bridge(QObject):
-    """后台线程 → 主线程 的信号桥。跨线程 emit 走队列投递，安全。"""
+    """后台线程 → 主线程 的信号桥（跨线程 emit 走队列投递，安全）。"""
 
-    status = Signal(str)      # 状态栏文本
-    chunk = Signal(str)       # 生成片段
-    sources = Signal(str)     # 来源 HTML
-    busy = Signal(bool)       # 输入区是否锁定
-    banner = Signal(str)      # 聊天区直接追加的 HTML
-
-
-def make_qa() -> QASystem:
-    qa = QASystem()
-    qa.load()
-    return qa
+    status = Signal(str)          # 状态栏文本
+    chunk = Signal(str)           # 生成片段（原始文本）
+    answer_done = Signal(list)    # 回答结束，附来源 dict 列表
+    busy = Signal(bool)           # 输入区是否锁定
 
 
 def warmup_thread(qa: QASystem, bridge: Bridge) -> None:
-    """启动预热：加载索引 + 让模型常驻（keep_alive=-1），不阻塞 UI。"""
     bridge.status.emit("正在加载向量库与 embedding 模型…")
     try:
         qa.load()
@@ -109,108 +99,248 @@ def warmup_thread(qa: QASystem, bridge: Bridge) -> None:
         try:
             qa.llm.warmup()
         except Exception:
-            pass  # 预热失败不致命，首问会自然慢一次
+            pass
     layers = qa.layer_counts()
     lay_txt = " / ".join(f"{k.upper()} {v:,}" for k, v in layers.items())
-    state = "● 在线" if online else "○ 离线（将降级为纯检索模式）"
+    state = "● 在线" if online else "○ 离线（降级为纯检索模式）"
     bridge.status.emit(
         f"向量库 {qa.count():,} 条（{lay_txt}）｜ 模型 {qa.model_name} ｜ Ollama {state}"
-    )
-    bridge.banner.emit(
-        "<span style='color:#8a8a8a;'>"
-        "试试：「玛莲妮亚怎么逃课」「玛莲妮亚怎么打（不逃课）」「我 60 级能打大树守卫吗」"
-        "「玛莲妮亚的追忆能换什么」</span><br>"
     )
 
 
 def ask_thread(qa: QASystem, bridge: Bridge, query: str) -> None:
-    """一次问答：检索 → 流式生成 → 来源。任何一步失败都不白屏。"""
     try:
         hits, diag = qa.retrieve(query, k=6)
-        intent = diag.get("intent", "normal")
-        bridge.chunk.emit(f"\n<b>你</b>：{html.escape(query)}\n")
-        bridge.chunk.emit(
-            f"<span style='color:#8a8a8a;font-size:9pt;'>"
-            f"路由 {intent}｜召回 L1 {diag.get('n_l1', 0)} / "
-            f"L2 {diag.get('n_l2', 0)} / L3 {diag.get('n_l3', 0)}</span><br>"
-        )
+        bridge.chunk.emit("")  # 触发创建回答气泡
         n = 0
         for c in qa.stream(query, hits, diag):
-            bridge.chunk.emit(html.escape(c).replace("\n", "<br>"))
+            bridge.chunk.emit(c)
             n += len(c)
         if n == 0:
-            bridge.chunk.emit("<span style='color:#b05050;'>（模型没有返回内容）</span>")
-        bridge.sources.emit(sources_html(qa.sources(hits)))
-        bridge.chunk.emit("<hr>")
+            bridge.chunk.emit("（模型没有返回内容）")
+        bridge.answer_done.emit(qa.sources(hits))
     except Exception as e:
-        bridge.chunk.emit(
-            f"<span style='color:#b05050;'>出错了：{html.escape(str(e))}<br>"
-            "请确认 Ollama 正在运行，或重试。</span><hr>"
-        )
+        bridge.chunk.emit(f"出错了：{e}\n请确认 Ollama 正在运行，或重试。")
+        bridge.answer_done.emit([])
     finally:
         bridge.busy.emit(False)
 
 
-# ---------------------------------------------------------------- 主窗口
+# ---------------------------------------------------------------- 聊天气泡
 
-class ChatWindow(QWidget):
-    def __init__(self):
-        super().__init__()
+class Bubble(CardWidget):
+    """一条消息卡片。role=user 右对齐主题色，role=bot 默认卡片。"""
+
+    def __init__(self, role: str, parent=None):
+        super().__init__(parent)
+        self.role = role
+        self.setFixedWidth(600)
+        self.label = BodyLabel(self)
+        self.label.setWordWrap(True)
+        self.label.setTextInteractionFlags(Qt.TextSelectableByMouse
+                                           | Qt.LinksAccessibleByMouse)
+        self.label.setOpenExternalLinks(True)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(14, 10, 14, 10)
+        lay.addWidget(self.label)
+        dark = isDarkTheme()
+        if role == "user":
+            bg = "#0078d4" if not dark else "#2b6cb8"
+            self.setStyleSheet(f"CardWidget{{background:{bg};border-radius:8px;}}")
+            self.label.setStyleSheet("color:white;font-size:14px;")
+        else:
+            self.setStyleSheet("CardWidget{border-radius:8px;}")
+            self.label.setStyleSheet("font-size:14px;")
+
+    def set_text(self, raw: str):
+        self.label.setText(md_lite(raw))
+
+
+# ---------------------------------------------------------------- 来源卡片
+
+class SourcesCard(CardWidget):
+    """检索来源卡片：默认只显示摘要，点「展开来源」看完整明细 + 原文链接。
+
+    为什么默认折叠：来源是给"想较真的人"核对的，不是给普通用户阅读的，
+    折叠让聊天流保持干净；但 RAG 必须能亮原文，所以一秒可达。
+    """
+
+    def __init__(self, sources: list[dict], parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(600)
+        self.setStyleSheet("CardWidget{border-radius:8px;}")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(14, 8, 14, 8)
+        lay.setSpacing(4)
+
+        self.detail = CaptionLabel(sources_lines(sources, with_url=True), self)
+        self.detail.setWordWrap(True)
+        self.detail.setTextInteractionFlags(Qt.TextSelectableByMouse
+                                            | Qt.LinksAccessibleByMouse)
+        self.detail.setOpenExternalLinks(True)
+        self.detail.hide()
+
+        self.summary = CaptionLabel(
+            f"📚 本次回答依据 {len(sources)} 条检索来源（点击展开核对）", self)
+        lay.addWidget(self.summary)
+        lay.addWidget(self.detail)
+
+        self.toggle = PushButton("展开来源", self)
+        self.toggle.setFixedHeight(28)
+        self.toggle.clicked.connect(self._flip)
+        lay.addWidget(self.toggle)
+
+    def _flip(self):
+        shown = not self.detail.isVisible()
+        self.detail.setVisible(shown)
+        self.toggle.setText("收起来源" if shown else "展开来源")
+        self.adjustSize()
+
+
+# ---------------------------------------------------------------- 聊天界面
+
+class ChatInterface(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("chatInterface")
         self.qa = QASystem()
         self.bridge = Bridge()
-        self.bridge.chunk.connect(self._append)
-        self.bridge.sources.connect(self._append)
-        self.bridge.banner.connect(self._append)
+        self._buf = ""
+        self._answer_bubble: Bubble | None = None
+        self.bridge.chunk.connect(self._on_chunk)
+        self.bridge.answer_done.connect(self._on_done)
         self.bridge.busy.connect(self._set_busy)
-
-        self.setWindowTitle("NaviRAG · 本地攻略问答")
-        self.resize(780, 660)
         self._build_ui()
-
+        # 状态栏在 _build_ui 里创建，连接必须放在它之后
+        self.bridge.status.connect(self.status_label.setText)
+        self._apply_saved_theme()
         threading.Thread(target=warmup_thread, args=(self.qa, self.bridge),
                          daemon=True).start()
 
     # ---------------- UI
 
     def _build_ui(self):
-        font = QFont("Microsoft YaHei UI", 10)
-        self.setFont(font)
+        self.setFont(QFont("Microsoft YaHei UI", 10))
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 16, 24, 12)
+        root.setSpacing(10)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
+        # 顶部：标题 + 暗色开关
+        head = QHBoxLayout()
+        head.addWidget(TitleLabel("NaviRAG"))
+        head.addSpacing(8)
+        head.addWidget(CaptionLabel("本地多游戏攻略 RAG · 艾尔登法环"))
+        head.addStretch(1)
+        self.theme_switch = SwitchButton("暗色模式")
+        self.theme_switch.checkedChanged.connect(self._toggle_theme)
+        head.addWidget(self.theme_switch)
+        root.addLayout(head)
 
-        self.chat = QTextBrowser()
-        self.chat.setOpenExternalLinks(True)
-        layout.addWidget(self.chat, 1)
+        # 聊天滚动区
+        self.scroll = ScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(self.scroll.Shape.NoFrame)
+        inner = QWidget()
+        inner.setObjectName("chatInner")
+        self.chat_lay = QVBoxLayout(inner)
+        self.chat_lay.setContentsMargins(4, 4, 4, 4)
+        self.chat_lay.setSpacing(10)
+        self.chat_lay.addStretch(1)
+        self.scroll.setWidget(inner)
+        root.addWidget(self.scroll, 1)
 
+        # 底部：输入 + 发送
         row = QHBoxLayout()
-        self.input = QLineEdit()
+        self.input = LineEdit()
         self.input.setPlaceholderText("输入问题，回车发送…")
+        self.input.setClearButtonEnabled(True)
         self.input.returnPressed.connect(self.send)
-        self.send_btn = QPushButton("发送")
+        self.send_btn = PrimaryPushButton(FluentIcon.SEND, "发送")
         self.send_btn.clicked.connect(self.send)
         row.addWidget(self.input, 1)
         row.addWidget(self.send_btn)
-        layout.addLayout(row)
+        root.addLayout(row)
 
-        self.status = QLabel("正在启动…")
-        self.status.setStyleSheet("color:#666;font-size:9pt;")
-        layout.addWidget(self.status)
+        self.progress = IndeterminateProgressBar(self)
+        self.progress.hide()
+        root.addWidget(self.progress)
+
+        self.status_label = CaptionLabel("正在启动…")
+        root.addWidget(self.status_label)
+
+        self._welcome()
+
+    def _apply_saved_theme(self):
+        """主题持久化：QSettings 记住上次选择（注册表，无额外文件）。"""
+        settings = QSettings("NaviRAG", "desktop")
+        dark = settings.value("dark_theme", False, type=bool)
+        self.theme_switch.setChecked(dark)
+        setTheme(Theme.DARK if dark else Theme.LIGHT)
+        # 主题应用后，欢迎气泡颜色跟随重建
+        for i in range(self.chat_lay.count() - 1):
+            w = self.chat_lay.itemAt(i).widget()
+            if isinstance(w, Bubble) and w.role == "user":
+                bg = "#0078d4" if not dark else "#2b6cb8"
+                w.setStyleSheet(f"CardWidget{{background:{bg};border-radius:8px;}}")
+
+    def _welcome(self):
+        tip = ("试试问我：\n"
+               "· 玛莲妮亚怎么逃课\n"
+               "· 玛莲妮亚怎么打（不逃课）\n"
+               "· 我 60 级能打大树守卫吗\n"
+               "· 玛莲妮亚的追忆能换什么")
+        b = Bubble("bot")
+        b.set_text(tip)
+        self._add_bubble(b)
+
+    # ---------------- 气泡管理
+
+    def _add_bubble(self, w: QWidget, role: str = "bot"):
+        align = Qt.AlignRight if role == "user" else Qt.AlignLeft
+        self.chat_lay.insertWidget(self.chat_lay.count() - 1, w, 0, align)
+        self._scroll_bottom()
+
+    def _scroll_bottom(self):
+        bar = self.scroll.verticalScrollBar()
+        bar.setValue(bar.maximum())
 
     # ---------------- 槽
 
-    def _append(self, html_text: str):
-        self.chat.moveCursor(QTextCursor.End)
-        self.chat.insertHtml(html_text)
-        self.chat.verticalScrollBar().setValue(self.chat.verticalScrollBar().maximum())
+    def _on_chunk(self, chunk: str):
+        # 第一个片段触发创建回答气泡
+        if self._answer_bubble is None:
+            self._answer_bubble = Bubble("bot")
+            self._buf = ""
+            self._add_bubble(self._answer_bubble)
+        if chunk:
+            self._buf += chunk
+        self._answer_bubble.set_text(self._buf)
+        self._scroll_bottom()
+
+    def _on_done(self, sources: list):
+        if sources:
+            self._add_bubble(SourcesCard(sources))
+        self._answer_bubble = None
 
     def _set_busy(self, busy: bool):
         self.send_btn.setEnabled(not busy)
         self.input.setEnabled(not busy)
         self.send_btn.setText("回答中…" if busy else "发送")
+        self.progress.show() if busy else self.progress.hide()
         if not busy:
             self.input.setFocus()
+
+    def _toggle_theme(self, checked: bool):
+        setTheme(Theme.DARK if checked else Theme.LIGHT)
+        QSettings("NaviRAG", "desktop").setValue("dark_theme", bool(checked))
+        # 换肤后用户气泡底色需要重建
+        bg = "#2b6cb8" if checked else "#0078d4"
+        for i in range(self.chat_lay.count() - 1):
+            w = self.chat_lay.itemAt(i).widget()
+            if isinstance(w, Bubble) and w.role == "user":
+                w.setStyleSheet(f"CardWidget{{background:{bg};border-radius:8px;}}")
+        InfoBar.success("已切换主题", "下次启动会记住这个选择。",
+                        duration=2000, parent=self.window())
 
     # ---------------- 动作
 
@@ -219,17 +349,30 @@ class ChatWindow(QWidget):
         if not text:
             return
         if not self.qa.ready:
-            self._append("<span style='color:#b05050;'>索引还没加载完，稍等几秒。</span><br>")
+            InfoBar.warning("还没就绪", "索引正在加载，稍等几秒再问。",
+                            duration=2000, parent=self.window())
             return
         self.input.clear()
         self._set_busy(True)
+        b = Bubble("user")
+        b.set_text(text)
+        self._add_bubble(b, role="user")
         threading.Thread(target=ask_thread, args=(self.qa, self.bridge, text),
                          daemon=True).start()
 
 
+class DesktopChatWindow(FluentWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("NaviRAG · 本地攻略问答")
+        self.resize(860, 720)
+        self.interface = ChatInterface(self)
+        self.addSubInterface(self.interface, FluentIcon.CHAT, "问答")
+
+
 def main():
     app = QApplication(sys.argv)
-    win = ChatWindow()
+    win = DesktopChatWindow()
     win.show()
     sys.exit(app.exec())
 

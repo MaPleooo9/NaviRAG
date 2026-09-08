@@ -67,6 +67,7 @@ python scripts/smoke_app.py
 
 ```
 ├── app.py                  # Streamlit 界面（流式输出 + 来源展示 + 降级）
+├── desktop_chat.py         # 桌面端（PySide6 + Fluent 风格，双击 run_desktop.bat）
 ├── core/
 │   ├── retriever.py        # 三路召回 + 规则路由 + 混合排序
 │   ├── qa.py               # 编排层：检索 → Prompt → 流式生成 / 降级
@@ -102,10 +103,11 @@ python scripts/smoke_app.py
 ## Roadmap
 
 - [x] Streamlit UI + 流式输出 + 异常降级（LLM 挂了直接返回检索原文）
+- [x] Fluent 风格桌面端（QFluentWidgets 卡片气泡 + 暗色模式持久化 + 来源可展开核对）
 - [ ] L2 扩充至 100+ 条（当前 55）
 - [ ] L3 扩充至 50 条（当前 30）
 - [ ] 评估：Hit Rate / MRR，Base vs +Reranker 对比实验
-- [ ] pywebview 桌面壳（Windows 走系统 WebView2，零 Chromium 依赖）
+- [ ] pywebview 桌面壳（可选实验：Windows 走系统 WebView2，零 Chromium 依赖）
 
 ## 数据说明
 
