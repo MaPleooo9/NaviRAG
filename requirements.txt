@@ -11,3 +11,6 @@ requests
 # 以下为后续 UI 阶段依赖（已装可忽略）
 streamlit>=1.36
 pyyaml
+
+# 桌面端（desktop_chat.py，二选一即可，网页版用 streamlit）
+PySide6>=6.6
