@@ -107,7 +107,7 @@ def render_sources(sources: list[dict], diag: dict):
     """把检索来源摊开给用户看——RAG 系统的诚实性全靠这一块。"""
     intent = diag.get("intent", "normal")
     intent_zh = {"cheese": "逃课意图", "brain": "求最无脑", "level": "等级过滤",
-                 "normal": "常规攻略"}.get(intent, intent)
+                 "knowledge": "知识问答", "normal": "常规攻略"}.get(intent, intent)
     lv = f"｜等级上限 {diag['max_level']}" if diag.get("max_level") else ""
     st.markdown(
         f'<p class="diag">路由 {intent_zh}｜权重 L1 {diag["w_l1"]} / '

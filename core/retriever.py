@@ -189,6 +189,16 @@ def enhance_query(q, zh2en):
 CHEESE_KEYWORDS = ["逃课", "轮椅", "无脑", "不想努力", "偷懒", "躺赢", "简单打", "轻松"]
 BRAIN_KEYWORDS = ["最无脑", "最简单", "最轻松", "手残"]
 
+# 问物品 / 地点 / 掉落 / 剧情，不是问打法。
+# 这类问题里常含 boss 名（"玛莲妮亚的追忆能换什么"），实体命中会把打法条目
+# 顶到第一——答非所问。识别出来后把 L1 拉满、L2/L3 压到最低。
+KNOWLEDGE_KEYWORDS = [
+    "在哪", "在哪里", "在哪个", "位置", "怎么去", "怎么走",
+    "能换", "换什么", "兑换", "换取",
+    "怎么获得", "怎么拿", "哪里拿", "哪里买", "掉落", "掉率",
+    "是什么", "剧情", "背景", "来历", "弱点", "抗性", "免疫",
+]
+
 # 「不逃课」「正常打」这类表达里也含"逃课"二字，纯关键词匹配会误判成想逃课。
 # 否定/常规诉求必须优先于 CHEESE_KEYWORDS 命中。
 NORMAL_FORCE = [
@@ -201,15 +211,22 @@ NORMAL_FORCE = [
 def route(query):
     """
     规则路由（纯关键词，不花 LLM 调用）：
-        level  → "我 60 级能逃吗"：提取等级，L2 做结构化过滤
-        brain  → 明确要"最无脑"，L2 按 brain_level 排序
-        cheese → 逃课意图，L2 权重拉满，L3 压到最低
-        normal → 常规攻略问题：L1 + L3 为主，L2 只留一点（万一他其实想逃）
+        level     → "我 60 级能逃吗"：提取等级，L2 做结构化过滤
+        knowledge → 问物品/地点/掉落/剧情，不是问打法：L1 拉满
+        brain     → 明确要"最无脑"，L2 按 brain_level 排序
+        cheese    → 逃课意图，L2 权重拉满，L3 压到最低
+        normal    → 常规攻略问题：L1 + L3 为主，L2 只留一点（万一他其实想逃）
     返回 (intent, w_l1, w_l2, w_l3, max_level)
     """
     m = re.search(r"(\d+)\s*级", query)
     if m and any(k in query for k in ["逃", "打得过", "能打", "可以打", "够"]):
         return "level", 0.20, 0.60, 0.20, int(m.group(1))
+    # 「追忆能换什么」「腐败吐息在哪拿」——问的是知识不是打法。
+    # 必须排在 cheese/brain 之前吗？不必：这类问句不含逃课词。
+    # 但必须排在 normal 之前，否则会落进 normal 的默认权重，
+    # 实体命中会把打法条目顶到第一——用户问掉落，拿到的是打法，答非所问。
+    if any(k in query for k in KNOWLEDGE_KEYWORDS):
+        return "knowledge", 0.85, 0.05, 0.10, None
     # 「怎么打 不逃课」「想学正常打法」→ 常规，L2 压到最低
     if any(k in query for k in NORMAL_FORCE):
         return "normal", 0.45, 0.10, 0.45, None
@@ -246,11 +263,15 @@ def _entity_hit(query, m) -> float:
 
 
 def _recall_structured(col, emb, layer, topk, n_total, query,
-                       max_level=None, require=None, exclude=None):
+                       max_level=None, require=None, exclude=None,
+                       entity_boost=True):
     """L2 / L3 层召回：向量相似度 + 结构化过滤 + 实体命中打分。
 
     两层的召回逻辑完全一样，区别只在后面排序时用的字段
     （L2 用无脑度，L3 用难度），所以抽成一个函数。
+
+    entity_boost=False 用于评估脚本的消融实验——关掉它才能量化
+    "实体命中置顶"到底贡献了多少。线上永远开着。
     """
     res = col.query(query_embeddings=[emb], n_results=min(topk, n_total),
                     where={"layer": layer},
@@ -270,12 +291,13 @@ def _recall_structured(col, emb, layer, topk, n_total, query,
         out.append({"id": res["ids"][0][i],
                     "score_raw": 1.0 - res["distances"][0][i],
                     "meta": m, "text": doc,
-                    "target_hit": _entity_hit(query, m)})
+                    "target_hit": _entity_hit(query, m) if entity_boost else 0.0})
     return out
 
 
-def search(col, model, query, k=FINAL_K, w_l1=W_L1, w_l2=W_L2, w_l3=W_L3,
-           zh2en=None, max_level=None, require=None, exclude=None):
+def search(col, model, query, k=FINAL_K, w_l1=None, w_l2=None, w_l3=None,
+           zh2en=None, max_level=None, require=None, exclude=None,
+           entity_boost=True):
     """
     三路召回 + 加权融合：L1 通用攻略 / L2 逃课 / L3 常规打法。
 
@@ -283,7 +305,13 @@ def search(col, model, query, k=FINAL_K, w_l1=W_L1, w_l2=W_L2, w_l3=W_L3,
         max_level: 用户等级，过滤 level_req <= max_level 的打法
         require:   必须包含的道具关键词列表
         exclude:   必须不包含的道具关键词列表
+
+    entity_boost: 关掉可退化为"纯分层加权"，供评估脚本做消融对比
     """
+    # 保留用户原话：增强注入的英文名会把原词插断（"黑剑眷属" →
+    # "黑剑 black blade眷属 black blade kindred"），实体匹配和路由
+    # 都必须基于原话，增强只服务于 embedding。
+    orig_query = query
     if zh2en:
         query = enhance_query(query, zh2en)
     emb = model.encode([query], normalize_embeddings=True)[0].tolist()
@@ -299,12 +327,16 @@ def search(col, model, query, k=FINAL_K, w_l1=W_L1, w_l2=W_L2, w_l3=W_L3,
         l1.append({"id": res["ids"][0][i], "score_raw": 1.0 - res["distances"][0][i],
                    "meta": res["metadatas"][0][i], "text": res["documents"][0][i]})
 
-    l2 = _recall_structured(col, emb, "l2", TOPK_L2, n, query,
-                            max_level, require, exclude)
-    l3 = _recall_structured(col, emb, "l3", TOPK_L3, n, query,
-                            max_level, require, exclude)
+    l2 = _recall_structured(col, emb, "l2", TOPK_L2, n, orig_query,
+                            max_level, require, exclude, entity_boost)
+    l3 = _recall_structured(col, emb, "l3", TOPK_L3, n, orig_query,
+                            max_level, require, exclude, entity_boost)
 
-    intent, w_l1, w_l2, w_l3, auto_level = route(query)
+    # 显式传权重时不走路由（评估脚本做权重扫描要用）；否则由 route 决定
+    intent, rw1, rw2, rw3, auto_level = route(orig_query)
+    w_l1 = rw1 if w_l1 is None else w_l1
+    w_l2 = rw2 if w_l2 is None else w_l2
+    w_l3 = rw3 if w_l3 is None else w_l3
     if max_level is None:
         max_level = auto_level
 
@@ -315,14 +347,25 @@ def search(col, model, query, k=FINAL_K, w_l1=W_L1, w_l2=W_L2, w_l3=W_L3,
     # brain/level 意图下无脑度主导档位
     for it in l2:
         base = it["target_hit"]
-        if intent in ("brain", "level"):
-            it["score"] = w_l2 * (base + it["meta"]["brain_level"] + it["score_raw"])
+        if intent == "knowledge":
+            # 问"追忆能换什么"时，打法条目只是背景信息，不享受实体置顶
+            it["score"] = w_l2 * it["score_raw"]
+        elif intent in ("brain", "level"):
+            # 无脑度只能在"目标正确"的前提下参与排序，绝不能反过来压过目标匹配。
+            # 曾经的 bug：无脑度按 1.0/级 直接相加，于是
+            #   大树守卫（命中 2.0 + 无脑 3）= 5.0
+            #   熔炉骑士（命中 0   + 无脑 5）= 5.0
+            # 两者基数打平，最后被向量相似度反超——用户问大树守卫，拿到熔炉骑士的打法。
+            # 改成以 3 为中心、幅度只有 ±1，永远小于实体命中的 2.0 档差。
+            it["score"] = w_l2 * (base + (it["meta"]["brain_level"] - 3) * 0.5
+                                  + it["score_raw"])
         else:
             it["score"] = w_l2 * (base + it["score_raw"])
     # L3：常规打法不需要按难度排序——用户问"怎么打"时想要的是对应 boss 的打法，
     # 不是"最简单那个"（那是 L2 的活）。实体命中 + 相似度即可。
     for it in l3:
-        it["score"] = w_l3 * (it["target_hit"] + it["score_raw"])
+        base = 0.0 if intent == "knowledge" else it["target_hit"]
+        it["score"] = w_l3 * (base + it["score_raw"])
 
     merged = l1 + l2 + l3
     merged.sort(key=lambda x: -x["score"])
