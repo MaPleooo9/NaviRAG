@@ -20,6 +20,9 @@
 ## 快速开始
 
 ```bash
+# 0. 启动界面（数据已就绪时，这一步就够了）
+streamlit run app.py
+
 # 1. 依赖
 pip install -r requirements.txt
 
@@ -37,15 +40,30 @@ python scripts/download_model.py
 
 # 5. 构建向量库 + 验证检索
 python -m core.retriever "玛莲妮亚怎么打"
+
+# 6. 界面无头冒烟（不打开浏览器也能验证脚本没崩）
+python scripts/smoke_app.py
 ```
+
+## 界面
+
+`streamlit run app.py` 之后是一个对话界面，左侧控制台可调「返回条数 / 最低无脑度 / 是否显示来源」。
+
+两个刻意的设计：
+
+- **答案下方永远摊开检索来源**。RAG 系统如果不敢把原文亮出来，就等于让用户盲信一个会编造的 3B 模型。每条来源标注层（L1 攻略 / L2 逃课）、无脑度、建议等级、是否本人验证、融合得分，以及本次的路由决策（意图 + 双路召回条数）。
+- **Ollama 掉了不白屏**。本地大模型连不上时自动切「纯检索模式」，直接把原文片段结构化列出来——检索层才是核心资产，宁可不给模型润色，也不能让它编。
 
 ## 目录结构
 
 ```
-├── app.py                  # Streamlit 前端（开发中）
+├── app.py                  # Streamlit 界面（流式输出 + 来源展示 + 降级）
 ├── core/
-│   └── retriever.py        # 两路召回 + 规则路由 + 混合排序
+│   ├── retriever.py        # 两路召回 + 规则路由 + 混合排序
+│   ├── qa.py               # 编排层：检索 → Prompt → 流式生成 / 降级
+│   └── llm.py              # Ollama 客户端：流式 + 预热常驻 + 故障可读
 ├── scripts/
+│   ├── smoke_app.py        # 界面无头冒烟测试（AppTest）
 │   ├── fetch_wiki.py       # wiki.gg 抓取（断点续传 / UA 伪装 / 限速）
 │   ├── build_glossary.py   # 官方中英术语表构建
 │   ├── build_l1_zh.py      # 官方中文语料导出
@@ -64,12 +82,14 @@ python -m core.retriever "玛莲妮亚怎么打"
 | qwen2.5:3b 生成速度（热） | 80.6 tok/s |
 | 首字延迟（冷 / 热） | 31.7s / 0.18s |
 | 生成 250 字中文 | ~4.7s |
-| 知识库规模 | 8,357 条（L1 8,334 + L2 23） |
+| 知识库规模 | 8,389 条（L1 8,334 + L2 55） |
+| 界面冷启动（索引 + 模型预热） | 9.0s |
+| 端到端问答（检索 + 生成） | 3.4s |
 
 ## Roadmap
 
-- [ ] Streamlit UI + 流式输出 + 异常降级（LLM 挂了直接返回检索原文）
-- [ ] L2 扩充至 100+ 条（当前 23）
+- [x] Streamlit UI + 流式输出 + 异常降级（LLM 挂了直接返回检索原文）
+- [ ] L2 扩充至 100+ 条（当前 55）
 - [ ] 评估：Hit Rate / MRR，Base vs +Reranker 对比实验
 - [ ] pywebview 桌面壳（Windows 走系统 WebView2，零 Chromium 依赖）
 
