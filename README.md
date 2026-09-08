@@ -6,8 +6,13 @@
 
 一个本地运行的 RAG（检索增强生成）游戏攻略问答助手，当前主打《艾尔登法环》。它和「又一个 RAG 教程项目」的区别在于两点：
 
-1. **分层知识库**：L1 层（wiki 攻略 + 官方中文语料，自动抓取）+ L2 层（逃课/轮椅打法，**人工整理的社区智慧**）。逃课打法天然不在 wiki 上——wiki 记录正规流程，「卡石头」「蹲大树引魔像」只存在于玩家社区。L2 层是手工资产，也是本项目的核心壁垒。
-2. **规则路由 + 混合检索**：纯向量检索在「短问句 vs 长文档」场景下会被内容词干扰（实测：问大树守卫，召回的是文本里带「蹲大树」的铃珠猎人打法）。解法是实体命中硬置顶 + 两路召回分层加权，而不是调 embedding。
+1. **三层知识库**：
+   - **L1** wiki 攻略 + 官方中文语料（自动抓取，8,334 条）
+   - **L2** 逃课/轮椅打法（**人工整理**，55 条）——逃课打法天然不在 wiki 上，wiki 记录正规流程，「卡石头」「蹲大树引魔像」只存在于玩家社区
+   - **L3** 常规打法（**人工整理**，5 条起步）——不卡 bug、不利用地形，靠操作和机制理解打赢
+
+   L2 和 L3 必须分开：混在一层时，问「怎么逃课」会召回归常规打法，问「怎么打」又会召回归逃课，两边都不对。想学真本事的人和二周目赶路的人要的不是同一种答案。
+2. **规则路由 + 混合检索**：纯向量检索在「短问句 vs 长文档」场景下会被内容词干扰（实测：问大树守卫，召回的是文本里带「蹲大树」的铃珠猎人打法）。解法是实体命中硬置顶 + 三路召回分层加权，而不是调 embedding。路由还能识别否定表达——「怎么打**不逃课**」里也含"逃课"二字，纯关键词会误判，这里做了专门的否定词表。
 
 ## 特性
 
@@ -16,6 +21,7 @@
 - **意图路由不花 Token**：常规 / 逃课 / 无脑度排序 三种意图纯规则识别，零 LLM 调用
 - **结构化过滤**：「我 60 级能逃吗」→ 直接按 level_req 过滤；「不用召唤的」→ 按 requires 排除——这是纯向量检索做不到的
 - **冷启动治理**：Ollama 默认 5 分钟卸载模型，首次调用 31.7s / 热调用 0.18s。启动预热 + keep_alive 常驻解决（见 docs/bench.md）
+- **降级不白屏**：本地大模型掉线时自动切「纯检索模式」，直接把原文片段结构化列出来——检索层才是核心资产，宁可不给模型润色，也不能让它编
 
 ## 快速开始
 
@@ -34,6 +40,9 @@ python scripts/build_glossary.py    # 官方术语表（15,751 条）
 python scripts/fetch_wiki.py        # wiki 抓取（~950 页）
 python scripts/build_l1_zh.py       # 官方中文语料（~5,000 条）
 python scripts/clean_l1.py          # 清洗索引页噪声
+# L2/L3 是人工层，Markdown 写好后再转 JSONL（改完必跑，否则不生效）
+python scripts/build_l2.py          # 逃课打法 → l2_cheese.jsonl
+python scripts/build_l3.py          # 常规打法 → l3_normal.jsonl
 
 # 4. embedding 模型（ModelScope 直链，~450MB）
 python scripts/download_model.py
@@ -59,7 +68,7 @@ python scripts/smoke_app.py
 ```
 ├── app.py                  # Streamlit 界面（流式输出 + 来源展示 + 降级）
 ├── core/
-│   ├── retriever.py        # 两路召回 + 规则路由 + 混合排序
+│   ├── retriever.py        # 三路召回 + 规则路由 + 混合排序
 │   ├── qa.py               # 编排层：检索 → Prompt → 流式生成 / 降级
 │   └── llm.py              # Ollama 客户端：流式 + 预热常驻 + 故障可读
 ├── scripts/
@@ -67,11 +76,14 @@ python scripts/smoke_app.py
 │   ├── fetch_wiki.py       # wiki.gg 抓取（断点续传 / UA 伪装 / 限速）
 │   ├── build_glossary.py   # 官方中英术语表构建
 │   ├── build_l1_zh.py      # 官方中文语料导出
-│   ├── build_l2.py         # L2 手工数据解析（markdown → jsonl，带校验）
+│   ├── build_l2.py         # L2 逃课数据解析（markdown → jsonl，带校验）
+│   ├── build_l3.py         # L3 常规打法解析（字段不同，独立解析器）
+│   ├── verify_l2.py        # 批量把「验证: 否」改成「是」
 │   ├── download_model.py   # embedding 模型下载（ModelScope 直链）
 │   └── bench_ollama.py     # 本机 LLM benchmark（TTFT / tok/s）
 ├── data/elden_ring/
-│   └── l2_cheese.md        # ★ 逃课打法知识库（人工整理，核心资产）
+│   ├── l2_cheese.md        # ★ 逃课打法知识库（人工整理，核心资产）
+│   └── l3_normal.md        # ★ 常规打法知识库（人工整理）
 └── docs/bench.md           # 性能实测数据
 ```
 
@@ -82,14 +94,16 @@ python scripts/smoke_app.py
 | qwen2.5:3b 生成速度（热） | 80.6 tok/s |
 | 首字延迟（冷 / 热） | 31.7s / 0.18s |
 | 生成 250 字中文 | ~4.7s |
-| 知识库规模 | 8,389 条（L1 8,334 + L2 55） |
+| 知识库规模 | 8,394 条（L1 8,334 + L2 55 + L3 5） |
 | 界面冷启动（索引 + 模型预热） | 9.0s |
 | 端到端问答（检索 + 生成） | 3.4s |
+| 索引全量重建 | 67s |
 
 ## Roadmap
 
 - [x] Streamlit UI + 流式输出 + 异常降级（LLM 挂了直接返回检索原文）
 - [ ] L2 扩充至 100+ 条（当前 55）
+- [ ] L3 扩充至 50 条（当前 5，先跑通流程再批量）
 - [ ] 评估：Hit Rate / MRR，Base vs +Reranker 对比实验
 - [ ] pywebview 桌面壳（Windows 走系统 WebView2，零 Chromium 依赖）
 

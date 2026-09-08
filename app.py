@@ -45,6 +45,7 @@ st.markdown("""
       background: rgba(212,162,74,0.06); border-radius: 0 6px 6px 0; font-size: 0.9rem;
   }
   .src-card.l1 { border-left-color: #6b8fbf; background: rgba(107,143,191,0.06); }
+  .src-card.l3 { border-left-color: #7bb07b; background: rgba(123,176,123,0.06); }
   .src-title { font-weight: 600; margin-bottom: 0.2rem; }
   .src-meta { color: #8a8a8a; font-size: 0.8rem; margin-bottom: 0.35rem; }
   .src-body { color: #d0d0d0; line-height: 1.6; white-space: pre-wrap; }
@@ -55,11 +56,11 @@ st.markdown("""
 
 EXAMPLES = [
     "玛莲妮亚怎么逃课？",
+    "玛莲妮亚怎么打（不逃课）",
+    "拉塔恩怎么打",
+    "黑剑玛利喀斯怎么打",
     "给我最无脑的打法",
     "我 60 级能打大树守卫吗",
-    "女武神的水鸟乱舞怎么躲",
-    "碎星将军拉塔恩怎么打",
-    "血王蒙格的二阶段怎么应对",
 ]
 
 
@@ -109,9 +110,10 @@ def render_sources(sources: list[dict], diag: dict):
                  "normal": "常规攻略"}.get(intent, intent)
     lv = f"｜等级上限 {diag['max_level']}" if diag.get("max_level") else ""
     st.markdown(
-        f'<p class="diag">路由 {intent_zh}｜L1 权重 {diag["w_l1"]} / '
-        f'L2 权重 {diag["w_l2"]}{lv}｜召回 L1 {diag["n_l1"]} 条 / '
-        f'L2 {diag["n_l2"]} 条</p>',
+        f'<p class="diag">路由 {intent_zh}｜权重 L1 {diag["w_l1"]} / '
+        f'L2 {diag["w_l2"]} / L3 {diag["w_l3"]}{lv}｜'
+        f'召回 L1 {diag["n_l1"]} 条 / L2 {diag["n_l2"]} 条 / '
+        f'L3 {diag["n_l3"]} 条</p>',
         unsafe_allow_html=True,
     )
 
@@ -120,21 +122,28 @@ def render_sources(sources: list[dict], diag: dict):
             if s["layer"] == "l2":
                 stars = "★" * s["brain_level"] + "☆" * (5 - s["brain_level"])
                 meta = f"L2 逃课 · 无脑度 {stars}"
+                cls = "src-card"
+            elif s["layer"] == "l3":
+                stars = "▲" * s["difficulty"] + "△" * (5 - s["difficulty"])
+                meta = f"L3 常规 · 难度 {stars}"
+                cls = "src-card l3"
+            else:
+                meta = "L1 攻略"
+                cls = "src-card l1"
+
+            if s["layer"] in ("l2", "l3"):
                 if s["level_req"]:
                     meta += f" · 建议 {s['level_req']} 级"
                 meta += f" · {'✅ 已验证' if s['verified'] else '⚠️ 未验证'}"
                 if s["target"]:
                     meta += f" · 目标 {s['target']}"
-            else:
-                meta = "L1 攻略"
-                if s["url"]:
-                    meta += f" · [原文]({s['url']})"
+            elif s["url"]:
+                meta += f" · [原文]({s['url']})"
             meta += f" · 得分 {s['score']}"
 
             body = s["text"].strip()
             if len(body) > 420:
                 body = body[:420] + "…"
-            cls = "src-card" if s["layer"] == "l2" else "src-card l1"
             st.markdown(
                 f'<div class="{cls}">'
                 f'<div class="src-title">{i}. {s["title"]}</div>'
@@ -153,7 +162,13 @@ def sidebar(qa: QASystem | None):
         if qa is None:
             st.error("检索层未就绪")
         else:
-            st.success(f"向量库 {qa.count():,} 条")
+            counts = qa.layer_counts()
+            st.success(
+                f"向量库 {qa.count():,} 条  \n"
+                f"L1 攻略 {counts.get('l1', 0):,} ｜ "
+                f"L2 逃课 {counts.get('l2', 0)} ｜ "
+                f"L3 常规 {counts.get('l3', 0)}"
+            )
             llm_ok = qa.llm.available()
             if llm_ok:
                 warm = st.session_state.get("warm_sec", -1)

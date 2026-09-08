@@ -42,7 +42,9 @@ INTENT_HINT = {
     "brain": "用户明确想要最省事/最无脑的打法。请优先挑无脑度最高的那条，并说明为什么它最省事。",
     "cheese": "用户想逃课。请优先给出逃课打法（L2 层资料），把「需要什么」和「具体怎么做」讲清楚。",
     "level": "用户关心当前等级能不能打。请说明建议等级、等级不够时的替代方案。",
-    "normal": "用户想了解常规攻略信息。请综合资料给出准确、有条理的说明。",
+    "normal": ("用户想学正常打法，不是逃课。请优先使用 L3 常规打法资料，"
+               "按「核心思路 → 步骤 → 翻车点」讲清楚操作要点；"
+               "没有 L3 资料时再用 L1 攻略内容综合说明。"),
 }
 
 
@@ -81,6 +83,15 @@ class QASystem:
     def count(self) -> int:
         return self._col.count() if self._col else 0
 
+    def layer_counts(self) -> dict:
+        """各层条目数，用于界面上展示分层情况"""
+        if not self._col:
+            return {}
+        return {
+            lay: len(self._col.get(where={"layer": lay}, include=[])["ids"])
+            for lay in ("l1", "l2", "l3")
+        }
+
     # ------------------------------------------------------------ 检索
 
     def retrieve(self, query: str, k: int = 6) -> tuple[list[dict], dict]:
@@ -98,6 +109,13 @@ class QASystem:
             parts.append(f"★逃课打法｜目标：{m['target'] or '通用'}")
             parts.append(f"打法：{m['title_zh'] or m['title']}")
             parts.append(f"无脑度：{m['brain_level']}/5")
+            if m["level_req"]:
+                parts.append(f"建议等级：{m['level_req']}")
+            parts.append("状态：本人已验证" if m["verified"] else "状态：未验证")
+        elif m["layer"] == "l3":
+            parts.append(f"⚔常规打法｜目标：{m['target'] or '通用'}")
+            parts.append(f"打法：{m['title_zh'] or m['title']}")
+            parts.append(f"难度：{m['difficulty']}/5")
             if m["level_req"]:
                 parts.append(f"建议等级：{m['level_req']}")
             parts.append("状态：本人已验证" if m["verified"] else "状态：未验证")
@@ -162,14 +180,21 @@ class QASystem:
             "以下是从资料库原文检索到的内容，未经模型整理，但都是原文，可信。",
             f"\n> 降级原因：{reason or 'Ollama 未响应'}",
             f"> 路由：{diag.get('intent', 'normal')}｜"
-            f"召回 L1 {diag.get('n_l1', 0)} 条 / L2 {diag.get('n_l2', 0)} 条\n",
+            f"召回 L1 {diag.get('n_l1', 0)} 条 / L2 {diag.get('n_l2', 0)} 条"
+            f" / L3 {diag.get('n_l3', 0)} 条\n",
         ]
         for i, h in enumerate(hits[:5], 1):
             m = h["meta"]
             if m["layer"] == "l2":
-                head = (f"**{i}. ★{m['title_zh'] or m['title']}**"
-                        f"（目标：{m['target'] or '通用'}｜"
+                head = (f"**{i}. ★{m['title_zh'] or m['title']}**（逃课｜"
+                        f"目标：{m['target'] or '通用'}｜"
                         f"无脑度 {m['brain_level']}/5"
+                        + (f"｜建议 {m['level_req']} 级" if m["level_req"] else "")
+                        + "）")
+            elif m["layer"] == "l3":
+                head = (f"**{i}. ⚔{m['title_zh'] or m['title']}**（常规打法｜"
+                        f"目标：{m['target'] or '通用'}｜"
+                        f"难度 {m['difficulty']}/5"
                         + (f"｜建议 {m['level_req']} 级" if m["level_req"] else "")
                         + "）")
             else:
@@ -192,6 +217,7 @@ class QASystem:
                 "title": m["title_zh"] or m["title"] or m["category"] or "(无标题)",
                 "target": m.get("target", ""),
                 "brain_level": m.get("brain_level", 0),
+                "difficulty": m.get("difficulty", 0),
                 "level_req": m.get("level_req", 0),
                 "verified": m.get("verified", False),
                 "url": m.get("url", ""),

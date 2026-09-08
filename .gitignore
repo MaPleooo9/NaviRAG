@@ -12,6 +12,7 @@ data/elden_ring/glossary_flat.json
 data/elden_ring/l1_wiki.jsonl
 data/elden_ring/l1_zh_game.jsonl
 data/elden_ring/l2_cheese.jsonl
+data/elden_ring/l3_normal.jsonl
 
 # ---- 本地环境 ----
 .venv/
