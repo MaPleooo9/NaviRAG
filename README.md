@@ -107,8 +107,28 @@ python scripts/smoke_app.py
 - [ ] L2 扩充至 100+ 条（当前 55）
 - [ ] L3 扩充至 50 条（当前 30）
 - [x] 评估：71 条人工标注问法，Hit@1 15.5%（纯向量）→ **98.6%**（线上方案），MRR 0.991，含消融与权重扫描（见 docs/eval.md）
+- [x] PyInstaller 打包：exe 与数据分离，改攻略后双击「更新攻略.bat」重建索引，无需重装环境
 - [ ] 评估集持续扩充 + Reranker 对比实验
 - [ ] pywebview 桌面壳（可选实验：Windows 走系统 WebView2，零 Chromium 依赖）
+
+## 打包为 exe（Windows）
+
+程序与数据分离是打包方案的核心——exe 里只有代码和依赖，`data/`、`models/`、`.vectorstore/` 外置在 exe 旁边，**加新攻略不用重新打包**：
+
+```bat
+:: 1. 一键打包（PyInstaller onedir，产物在 dist/NaviRAG/）
+python scripts/package_win.py
+
+:: 2. 以后加了新攻略：改 data/elden_ring/*.md，然后双击
+更新攻略.bat        :: 等价于 NaviRAG.exe --rebuild，弹窗显示进度
+```
+
+两个踩过的坑（打包前不知道、打包后必踩）：
+
+1. **chromadb 动态加载**：它用 `importlib` 按字符串加载实现类（如 `chromadb.telemetry.product.posthog`），静态分析收不到，运行时直接崩——spec 里必须 `collect_submodules('chromadb')` 整包收集；
+2. **路径不能信 `__file__`**：打包后它指向解包临时目录，所有数据路径必须基于 `sys.executable` 所在目录定位（见 `core/retriever.py` 的 `_app_root()`）。
+
+分发：整个 `NaviRAG/` 目录打 zip 挂 GitHub Release（单文件 ≤2GB，不占仓库体积）。演示机仍需安装 Ollama 并拉取 qwen3:8b。
 
 ## 数据说明
 
