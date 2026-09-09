@@ -2,6 +2,9 @@
 
 > 无 GPU、纯 CPU、完全本地离线。问「玛莲妮亚怎么逃课」，它给你真·社区打法，而不是 wiki 流水账。
 
+**不想配环境？直接下载 Windows 可执行文件**：[NaviRAG v1.0.0 · NaviRAG-dist.zip（956 MB）](https://github.com/MaPleooo9/NaviRAG/releases/download/v1.0.0/NaviRAG-dist.zip)
+解压后双击 `NaviRAG.exe` 即用，内含 embedding 模型与预构建向量库；本机需先装 [Ollama](https://ollama.com) 并 `ollama pull qwen3:8b`。
+
 ## 这是什么
 
 一个本地运行的 RAG（检索增强生成）游戏攻略问答助手，当前主打《艾尔登法环》。它和「又一个 RAG 教程项目」的区别在于两点：
