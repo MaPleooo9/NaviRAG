@@ -78,11 +78,20 @@ def _embed_text(r):
     return t[:2000]
 
 
+# HNSW 默认的 search_ef 很小，近似度高到「同一条 query 两次召回排序不一样」
+# ——实测评估脚本连跑六次能出四种结果，指标根本不可复现。
+# 数据量只有八千多条，精确搜索也很快（71 条查询 1.1s，几乎无额外开销），
+# 没必要为了省几毫秒牺牲可复现性，所以把候选队列拉满。
+# 注意：这两个参数在建库时就固化进 collection，改了要 force=True 重建才生效。
+SEARCH_EF = 1000
+HNSW_METADATA = {"hnsw:space": "cosine", "hnsw:search_ef": SEARCH_EF}
+
+
 def build_index(model=None, force=False):
     """构建/增量更新 ChromaDB。返回 (client, collection, model)"""
     client = chromadb.PersistentClient(path=str(DB_DIR))
     col = client.get_or_create_collection(
-        "elden_ring", metadata={"hnsw:space": "cosine"})
+        "elden_ring", metadata=HNSW_METADATA)
 
     if model is None:
         model = SentenceTransformer(MODEL_NAME)
@@ -90,7 +99,13 @@ def build_index(model=None, force=False):
     if force:
         client.delete_collection("elden_ring")
         col = client.get_or_create_collection(
-            "elden_ring", metadata={"hnsw:space": "cosine"})
+            "elden_ring", metadata=HNSW_METADATA)
+
+    if (col.metadata or {}).get("hnsw:search_ef") != SEARCH_EF:
+        print(f"  ⚠ 当前 collection 的 hnsw:search_ef="
+              f"{(col.metadata or {}).get('hnsw:search_ef')}，"
+              f"低于 {SEARCH_EF} 会让检索结果不可复现，"
+              f"请用 build_index(force=True) 重建索引")
 
     rows = []
     for name in ("l1_wiki.jsonl", "l1_zh_game.jsonl", "l2_cheese.jsonl",
@@ -263,22 +278,30 @@ def _entity_hit(query, m) -> float:
                  if len(t.strip()) >= 2]
     # 双向匹配：
     #   正向  target 全名出现在 query 里（"玛莲妮亚怎么打"）
-    #   反向  query 里的词是 target 的后缀（"石像鬼" ⊂ "英雄石像鬼"）
-    # 只做正向时，用户省略前缀（英雄/双/老将）就匹配不上。
+    #   反向  query 里只说了 target 的一部分
+    #         - 后缀："石像鬼" ⊂ "英雄石像鬼"（用户省略前缀 英雄/双/老将）
+    #         - 前缀："接肢"  ⊂ "接肢葛瑞克"（用户省略后缀 葛瑞克）
+    # 只做正向时用户省略前缀就匹配不上；只做后缀时省略后缀同样匹配不上——
+    # 后者踩过一次：「接肢怎么正常打」「满月女王怎么打」都匹配不到 L2/L3，
+    # 掉进 L1 的《"接肢"贵族后裔》《…的追忆》这类同名词页面。
     # 两档内部都按命中长度分级，原因有两个（各踩过一次）：
     #   exact：引号拆词让复合名拆出短词（"“碎星将军”拉塔恩"→"拉塔恩"），
     #          短词与 7 字全名同档的话，"约定之王拉塔恩"会被一代目抢走 Top1；
-    #   suffix："弗尔桑克斯"4 字尾部精确命中与"…顿桑克斯"2 字蹭边同档的话，
+    #   part： "弗尔桑克斯"4 字尾部精确命中与"…顿桑克斯"2 字蹭边同档的话，
     #          死龙会被龙王普拉顿桑克斯挤下去。
     exact_lens = [len(t) for t in tgt_names if t in query]
-    suffix_lens = [len(t[-n:]) for t in tgt_names for n in (2, 3, 4)
-                   if len(t[-n:]) >= 2 and t[-n:] in query]
-    # 全名命中 > 后缀命中 > 未命中。分层是因为"龙装大树守卫"
-    # 与"大树守卫"是两个 boss，后缀命中不能享受同等置顶。
+    part_lens = [
+        n
+        for t in tgt_names if len(t) >= 3        # 太短的 target 拆不出有意义的片段
+        for n in (4, 3, 2) if len(t) > n         # 排除整名：整名命中已归 exact 档
+        if t[:n] in query or t[-n:] in query
+    ]
+    # 全名命中 > 部分命中 > 未命中。分层是因为"龙装大树守卫"
+    # 与"大树守卫"是两个 boss，部分命中不能享受同等置顶。
     if exact_lens:
         return 2.0 if max(exact_lens) >= 4 else 1.5
-    if suffix_lens:
-        return 1.5 if max(suffix_lens) >= 4 else 1.0
+    if part_lens:
+        return 1.5 if max(part_lens) >= 4 else 1.0
     return 0.0
 
 

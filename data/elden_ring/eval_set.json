@@ -1,5 +1,5 @@
 {
-  "_about": "检索评估集。每条 = 一个真实问法 + 期望命中的层 + 期望命中的目标（规范名，已去称号）。",
+  "_about": "检索评估集。每条 = 一个真实问法 + 期望命中的层 + 期望命中的目标（规范名，已去称号）。\n「口语俗称」「描述提问」两组是刻意补的难度组：前者测别名覆盖，后者完全不含实体名，是实体硬置顶会失效的题型，它们的通过率才是真实泛化能力的体现。",
   "_rule": {
     "expect_layer": "这条 query 理应命中哪一层：l1 攻略 / l2 逃课 / l3 常规",
     "expect_target": "期望的 boss 规范名（去称号）。空字符串 = 只判层不判目标，用于「给我最无脑的打法」这类没有具体 boss 的问题",
@@ -437,6 +437,90 @@
       "expect_layer": "l1",
       "expect_target": "",
       "group": "知识问答"
+    },
+    {
+      "query": "女武神怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "玛莲妮亚",
+      "group": "口语俗称"
+    },
+    {
+      "query": "碎星怎么无脑打",
+      "expect_layer": "l2",
+      "expect_target": "拉塔恩",
+      "group": "口语俗称"
+    },
+    {
+      "query": "碎星将军怎么打",
+      "expect_layer": "l3",
+      "expect_target": "拉塔恩",
+      "group": "口语俗称"
+    },
+    {
+      "query": "接肢怎么正常打",
+      "expect_layer": "l3",
+      "expect_target": "接肢葛瑞克",
+      "group": "口语俗称"
+    },
+    {
+      "query": "血王怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "蒙格",
+      "group": "口语俗称"
+    },
+    {
+      "query": "满月女王怎么打",
+      "expect_layer": "l3",
+      "expect_target": "满月女王蕾娜菈",
+      "group": "口语俗称"
+    },
+    {
+      "query": "黑剑怎么正常打",
+      "expect_layer": "l3",
+      "expect_target": "玛利喀斯",
+      "group": "口语俗称"
+    },
+    {
+      "query": "米凯拉的锋刃怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "玛莲妮亚",
+      "group": "口语俗称"
+    },
+    {
+      "query": "开局那个骑马的长枪骑士怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "大树守卫",
+      "group": "描述提问"
+    },
+    {
+      "query": "盖利德荒野里那条飞龙怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "飞龙桂雷尔",
+      "group": "描述提问"
+    },
+    {
+      "query": "地下墓地那个会隐身的结晶人怎么逃课",
+      "expect_layer": "l2",
+      "expect_target": "结晶人",
+      "group": "描述提问"
+    },
+    {
+      "query": "魔法学院最后那个boss怎么正常打",
+      "expect_layer": "l3",
+      "expect_target": "满月女王蕾娜菈",
+      "group": "描述提问"
+    },
+    {
+      "query": "雪山上那个扔火球的巨人怎么正常打",
+      "expect_layer": "l3",
+      "expect_target": "火焰巨人",
+      "group": "描述提问"
+    },
+    {
+      "query": "罗德尔王城里那个长角的国王怎么正常打",
+      "expect_layer": "l3",
+      "expect_target": "蒙葛特",
+      "group": "描述提问"
     }
   ]
 }
