@@ -53,6 +53,13 @@ TOPK_L3 = 300     # L3 层同理
 FINAL_K = 6       # 最终返回多少条
 
 
+# 别名档位：俗称/称号/错写命中（"女武神" → 玛莲妮亚）。
+# 刻意低于全名精确命中（2.0）和短名精确命中（1.5）——别名是"用户没说正式名"
+# 的兜底，不该压过真的说对了名字的条目；但要高于部分匹配（1.0），
+# 否则"接肢怎么正常打"这种省略后半段的写法会被别的条目蹭边抢走。
+ALIAS_SCORE = 1.45
+
+
 def layer_of(r) -> str:
     """按字段判断条目属于哪一层。id 前缀不靠谱，字段才是事实来源。"""
     if "difficulty" in r:
@@ -192,6 +199,27 @@ def load_zh2en():
     return zh2en
 
 
+_ALIAS_CACHE = None
+
+
+def load_aliases():
+    """boss 别名表：{实体名: [俗称...]}，让俗称提问也能命中实体规则。
+
+    为什么单独一张表而不是写进 md 条目里：
+      1. 同一 boss 在 L2/L3 可能有两套 target 写法（"“接肢”葛瑞克" /
+         "接肢葛瑞克"），别名写进条目要重复维护，写在这里一处即可；
+      2. 它是纯查询侧数据——改完不需要重建向量索引，加个俗称立刻生效。
+    文件缺失时返回空表，检索退化为「无别名」行为，不会报错。
+    """
+    global _ALIAS_CACHE
+    if _ALIAS_CACHE is None:
+        p = DATA / "aliases.json"
+        raw = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+        _ALIAS_CACHE = {k: [a for a in v if len(a) >= 2]
+                        for k, v in raw.items() if not k.startswith("_")}
+    return _ALIAS_CACHE
+
+
 def enhance_query(q, zh2en):
     """『玛莲妮亚怎么打』→『玛莲妮亚 Malenia 怎么打』"""
     hits = []
@@ -265,17 +293,28 @@ def route(query):
 
 # ---------------------------------------------------------------- 检索
 
-def _entity_hit(query, m) -> float:
+def target_names(target, title_zh="") -> list:
+    """从 target / 标题里拆出实体名片段。
+
+    全角引号也要当分隔符：target 常写成「"米凯拉的锋刃"玛莲妮亚」这种
+    称号 + 本名的形式，拆开后"米凯拉的锋刃"和"玛莲妮亚"都能独立命中。
+
+    抽成公共函数是为了让 scripts/check_aliases.py 复用同一套拆解逻辑——
+    校验脚本要是自己写一遍正则，迟早和检索器漂移，别名表就会静默失效。
+    """
+    tgt = (target or "") + " " + (title_zh or "")
+    return [t.strip() for t in re.split(r"[：:（）()，,\s「」“”『』]+", tgt)
+            if len(t.strip()) >= 2]
+
+
+def _entity_hit(query, m, alias_map=None) -> float:
     """query 里的 boss 名是否命中该条目的 target。
 
     这是硬规则而非软加成——实测"大树守卫怎么逃课"与灵马风筝条目的向量相似度
     只有 0.299（模型对"短问句 vs 长文档"匹配弱），而正文里沾边的无关条目
     （"蹲大树"）能到 0.63。调权重救不了，必须按实体直接分组。
     """
-    tgt = (m.get("target") or "") + " " + (m.get("title_zh") or "")
-    # 全角引号也要当分隔符：target 常写成"米凯拉的锋刃"玛莲妮亚
-    tgt_names = [t.strip() for t in re.split(r"[：:（）()，,\s「」“”『』]+", tgt)
-                 if len(t.strip()) >= 2]
+    tgt_names = target_names(m.get("target"), m.get("title_zh"))
     # 双向匹配：
     #   正向  target 全名出现在 query 里（"玛莲妮亚怎么打"）
     #   反向  query 里只说了 target 的一部分
@@ -296,18 +335,30 @@ def _entity_hit(query, m) -> float:
         for n in (4, 3, 2) if len(t) > n         # 排除整名：整名命中已归 exact 档
         if t[:n] in query or t[-n:] in query
     ]
-    # 全名命中 > 部分命中 > 未命中。分层是因为"龙装大树守卫"
+    # 别名档：用户用的是俗称/称号/常见错写（"女武神""黑剑""接肢"）。
+    # 必须排在精确与部分匹配之后——同一条目若同时命中正式名和别名，取高分那个，
+    # 但"说对了名字"永远比"说对了外号"更可信。
+    alias_lens = [
+        len(a)
+        for t in tgt_names
+        for a in (alias_map or {}).get(t, ())
+        if a in query
+    ]
+    # 全名命中 > 短名/部分命中 > 别名 > 未命中。分层是因为"龙装大树守卫"
     # 与"大树守卫"是两个 boss，部分命中不能享受同等置顶。
+    scores = []
     if exact_lens:
-        return 2.0 if max(exact_lens) >= 4 else 1.5
+        scores.append(2.0 if max(exact_lens) >= 4 else 1.5)
     if part_lens:
-        return 1.5 if max(part_lens) >= 4 else 1.0
-    return 0.0
+        scores.append(1.5 if max(part_lens) >= 4 else 1.0)
+    if alias_lens:
+        scores.append(ALIAS_SCORE)
+    return max(scores) if scores else 0.0
 
 
 def _recall_structured(col, emb, layer, topk, n_total, query,
                        max_level=None, require=None, exclude=None,
-                       entity_boost=True):
+                       entity_boost=True, alias_map=None):
     """L2 / L3 层召回：向量相似度 + 结构化过滤 + 实体命中打分。
 
     两层的召回逻辑完全一样，区别只在后面排序时用的字段
@@ -334,13 +385,14 @@ def _recall_structured(col, emb, layer, topk, n_total, query,
         out.append({"id": res["ids"][0][i],
                     "score_raw": 1.0 - res["distances"][0][i],
                     "meta": m, "text": doc,
-                    "target_hit": _entity_hit(query, m) if entity_boost else 0.0})
+                    "target_hit": _entity_hit(query, m, alias_map)
+                    if entity_boost else 0.0})
     return out
 
 
 def search(col, model, query, k=FINAL_K, w_l1=None, w_l2=None, w_l3=None,
            zh2en=None, max_level=None, require=None, exclude=None,
-           entity_boost=True):
+           entity_boost=True, use_alias=True):
     """
     三路召回 + 加权融合：L1 通用攻略 / L2 逃课 / L3 常规打法。
 
@@ -358,6 +410,7 @@ def search(col, model, query, k=FINAL_K, w_l1=None, w_l2=None, w_l3=None,
     if zh2en:
         query = enhance_query(query, zh2en)
     emb = model.encode([query], normalize_embeddings=True)[0].tolist()
+    alias_map = load_aliases() if use_alias else {}
 
     n = col.count()
     # 三路召回：每层独立查 top-K。若合成一次查，L1（8000+条）会把
@@ -371,9 +424,9 @@ def search(col, model, query, k=FINAL_K, w_l1=None, w_l2=None, w_l3=None,
                    "meta": res["metadatas"][0][i], "text": res["documents"][0][i]})
 
     l2 = _recall_structured(col, emb, "l2", TOPK_L2, n, orig_query,
-                            max_level, require, exclude, entity_boost)
+                            max_level, require, exclude, entity_boost, alias_map)
     l3 = _recall_structured(col, emb, "l3", TOPK_L3, n, orig_query,
-                            max_level, require, exclude, entity_boost)
+                            max_level, require, exclude, entity_boost, alias_map)
 
     # 显式传权重时不走路由（评估脚本做权重扫描要用）；否则由 route 决定
     intent, rw1, rw2, rw3, auto_level = route(orig_query)

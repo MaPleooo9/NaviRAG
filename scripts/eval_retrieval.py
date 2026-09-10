@@ -154,6 +154,17 @@ def make_runners(col, model, zh2en):
         hits, _ = search(col, model, query, k=k, entity_boost=True)
         return hits
 
+    def full_no_alias(query, k):
+        """D−alias：其余全开，但**不加载别名表**。
+
+        口语俗称组能全绿，靠的到底是语义检索还是这张手工俗称表？
+        把别名关掉再跑一次就知道——这种「某块数据/规则到底贡献了多少」
+        的对照，比一个总分更有说服力。
+        """
+        hits, _ = search(col, model, query, k=k, zh2en=zh2en,
+                         entity_boost=True, use_alias=False)
+        return hits
+
     def full(query, k):
         """D. C + 实体命中硬置顶 —— 线上实际使用的方案"""
         hits, _ = search(col, model, query, k=k, zh2en=zh2en,
@@ -164,6 +175,7 @@ def make_runners(col, model, zh2en):
         ("A 单路纯向量", pure),
         ("B +术语增强", pure_enhanced),
         ("C +分层加权", layered),
+        ("D−alias(关别名)", full_no_alias),
         ("D−enhance(关增强)", full_no_enhance),
         ("D +实体命中(线上)", full),
     ]
@@ -178,8 +190,9 @@ def make_rule_runner(col):
     只在「期望 L2/L3」的用例子集上有意义：L1 条目没有 target 字段，
     纯规则无法定位到具体 wiki 页面。
     """
-    from core.retriever import _entity_hit
+    from core.retriever import _entity_hit, load_aliases
 
+    aliases = load_aliases()
     cache = {}
 
     def all_items(layer):
@@ -192,7 +205,7 @@ def make_rule_runner(col):
         hits = []
         for layer in ("l2", "l3"):
             for meta in all_items(layer):
-                eh = _entity_hit(query, meta)
+                eh = _entity_hit(query, meta, aliases)
                 if eh > 0:
                     hits.append({"meta": meta, "eh": eh})
         hits.sort(key=lambda x: -x["eh"])
@@ -328,6 +341,9 @@ def report(all_res, sub_res, rule_cases, sweep_rows, cases, out_path):
         full = dict(all_res)
         d = full["D +实体命中(线上)"]
         ne = full["D−enhance(关增强)"]
+        na = full["D−alias(关别名)"]
+        na_g = na["by_group"].get("口语俗称", {"hit1": 0, "n": 0})
+        d_g = d["by_group"].get("口语俗称", {"hit1": 0, "n": 0})
         lines += [
             "",
             f"- **一次向量都不查**的纯实体规则，已经能把正确答案捞进候选框"
@@ -346,6 +362,13 @@ def report(all_res, sub_res, rule_cases, sweep_rows, cases, out_path):
             f"L2/L3 子集 {d_sub['hit5']:.1%} vs {ne_sub['hit5']:.1%}）。"
             f"即：增强在完整链路里既没被证明有用、也没造成明显损害——"
             f"比起保留一个无法证明价值的模块，更该评估直接关掉它以简化链路。",
+            f"- **别名表的贡献**：关掉俗称别名后 Hit@1 {na['hit1']:.1%}"
+            f"（口语俗称组 {na_g['hit1']}/{na_g['n']}），开启后 {d['hit1']:.1%}"
+            f"（{d_g['hit1']}/{d_g['n']}）。这部分差距全部来自手工登记的俗称"
+            f"——它不改善语义检索，只是把「用户说的名字」映射到「库里的名字」。"
+            f"换句话说，它和实体规则是同一类东西（人工词典），"
+            f"也是整条链路最脆弱的一环：新 boss 的俗称没登记，"
+            f"表现立刻退化回纯向量水平。",
         ]
 
     lines += [
@@ -426,7 +449,8 @@ def main():
     log(f"\n归因拆分（在「期望 L2/L3」的 {len(rule_cases)} 条子集上，"
         f"各组可比）：")
     for name in ["A 单路纯向量", "C +分层加权", "E 纯实体规则(无向量)",
-                 "D−enhance(关增强)", "D +实体命中(线上)"]:
+                 "D−alias(关别名)", "D−enhance(关增强)",
+                 "D +实体命中(线上)"]:
         r = sub_res[name]
         log(f"  {name:<20} Hit@1 {r['hit1']:6.1%} | Hit@5 {r['hit5']:6.1%} "
             f"| MRR {r['mrr']:.3f}")
