@@ -24,6 +24,115 @@ import sys
 import threading
 from pathlib import Path
 
+LAYER_TAG = {"l1": "L1攻略", "l2": "L2逃课", "l3": "L3常规"}
+
+WINDOW_TITLE = "NaviRAG · 本地攻略问答"
+_MUTEX_DESKTOP = "NaviRAG.Desktop.SingleInstance"
+_MUTEX_REBUILD = "NaviRAG.Rebuild.SingleInstance"
+
+
+# ---------------------------------------------------------------- 单实例
+# 注意这一节的**位置**：它刻意排在下面所有重依赖之前。
+# 下面 from core.qa import QASystem 会连带把 torch / sentence-transformers /
+# chromadb 全拉起来，冷启动十几秒。闸门若放在 main() 里，重复启动的第二个
+# 进程要先白烧十几秒 CPU、占几百 MB 内存才走到检查；放在模块顶部，它不到
+# 一秒就自己消失，用户只会看到已有窗口被唤到前台。
+
+_guard_handles: list = []   # 必须持有互斥量句柄到进程结束，被 GC 回收 = 锁没了
+
+
+def acquire_single_instance(name: str) -> bool:
+    """Windows 命名互斥量做单实例检测，返回 True 表示"已经有同名实例在跑"。
+
+    为什么用互斥量而不是锁文件:
+        锁文件在进程崩溃后会残留，用户得手动删掉文件才能再启动；命名互斥量
+        由内核持有，进程一退（正常关闭 / 任务管理器结束 / 崩溃）立即释放，
+        零残留，也不依赖任何第三方库，打包成 exe 后同样有效。
+    为什么不用 Qt 的 QLocalServer:
+        那个方案必须在 QApplication 起来之后才能判断，会白等一次 Qt 初始化；
+        互斥量在 QApplication 之前就拦住了，越早拦越省事。
+    """
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    ERROR_ALREADY_EXISTS = 183
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel32.CreateMutexW.restype = wintypes.HANDLE
+
+    ctypes.set_last_error(0)
+    handle = kernel32.CreateMutexW(None, False, name)
+    if not handle:
+        return False                    # 建不出来就放行，别把用户挡在门外
+    _guard_handles.append(handle)       # 句柄活到进程结束，互斥量才一直有效
+    return ctypes.get_last_error() == ERROR_ALREADY_EXISTS
+
+
+def focus_existing_window(title: str, timeout: float = 8.0) -> bool:
+    """把已有窗口从最小化还原并抢到前台；找不到就轮询等一会，返回是否成功。
+
+    为什么要轮询而不是查一次:
+        这正是"手快连点两次"的真实时序——第一次点击后窗口还没创建出来，
+        第二次点击时 FindWindowW 就查不到。只查一次会退化成"弹个框告诉用户
+        程序已经开了"，而这个框本身又要人去点，比不加还烦。轮询到窗口出现
+        为止，"连点两次"的体验就只有"窗口跳到前面"这一个结果。
+    抢前台在这里是允许的——本进程正是用户刚点击的前台进程。
+    """
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    import time as _time
+    from ctypes import wintypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+    user32.FindWindowW.restype = wintypes.HWND
+
+    deadline = _time.monotonic() + timeout
+    while True:
+        hwnd = user32.FindWindowW(None, title)
+        if hwnd:
+            user32.ShowWindow(hwnd, 9)      # SW_RESTORE：最小化状态也拉回来
+            user32.SetForegroundWindow(hwnd)
+            return True
+        if _time.monotonic() >= deadline:
+            return False
+        _time.sleep(0.2)
+
+
+def _enforce_single_instance() -> None:
+    """闸门：重复启动就在这里结束本进程，第二个窗口永远不会被创建。
+
+    正常返回 = 拿到了锁，可以继续加载 torch / Qt 这些重依赖。
+    重复启动 = 唤起已有窗口后直接 sys.exit 退出。
+    """
+    mutex = _MUTEX_REBUILD if "--rebuild" in sys.argv else _MUTEX_DESKTOP
+    if not acquire_single_instance(mutex):
+        return
+
+    if "--rebuild" in sys.argv:
+        # 更新任务没有窗口可以"唤起"，而且用户是专门双击 bat 来的，
+        # 这时候弹框告知是合理的（这条路径才去碰 Qt，平时不白付导入成本）。
+        from PySide6.QtWidgets import QApplication, QMessageBox
+        _ = QApplication(sys.argv)
+        QMessageBox.information(
+            None, "更新正在进行",
+            "已经有一个攻略更新任务在跑了。\n等它弹出完成提示后再试。")
+        sys.exit(0)
+
+    # 主界面重复启动：把已有窗口唤到前台就够了，不再多弹任何框。
+    # 轮询到最后还是没找到（窗口标题被改 / 跨会话）也静默退出——那个窗口
+    # 就在任务栏里，弹一个需要手动关闭的框反而比什么都不做更烦人。
+    focus_existing_window(WINDOW_TITLE)
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    # 必须早于 torch / Qt 的导入——放在这里，重复启动的进程秒退
+    _enforce_single_instance()
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from PySide6.QtCore import QSettings, QObject, Qt, Signal
@@ -38,9 +147,6 @@ from qfluentwidgets import (
 )
 
 from core.qa import QASystem  # noqa: E402
-
-LAYER_TAG = {"l1": "L1攻略", "l2": "L2逃课", "l3": "L3常规"}
-
 
 # ---------------------------------------------------------------- 渲染工具
 
@@ -364,7 +470,7 @@ class ChatInterface(QWidget):
 class DesktopChatWindow(FluentWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("NaviRAG · 本地攻略问答")
+        self.setWindowTitle(WINDOW_TITLE)   # 单实例靠这个标题找回已有窗口
         self.resize(860, 720)
         self.interface = ChatInterface(self)
         self.addSubInterface(self.interface, FluentIcon.CHAT, "问答")
@@ -422,10 +528,14 @@ def run_rebuild():
 
 
 def main():
+    # 单实例闸门已在模块顶部(_enforce_single_instance)执行过，走到这里说明
+    # 本进程持有互斥量，是唯一的那个实例。
+
     if "--rebuild" in sys.argv:
         _ = QApplication(sys.argv)      # 弹窗必需
         run_rebuild()
         return
+
     app = QApplication(sys.argv)
     win = DesktopChatWindow()
     win.show()
