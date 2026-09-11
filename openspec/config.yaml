@@ -1,0 +1,69 @@
+schema: spec-driven
+
+# context: 每个提案/设计/任务都会读到，作为「约束」而非产物内容。
+# 注意：它不能覆盖 workflow 自身的门禁（planning boundary 等），那些在
+# .workbuddy/skills/openspec-* 的「本机适配」块里处理。
+context: |
+  语言：zh-CN。所有产物用中文写；OpenSpec 的结构化标题（ADDED Requirements、
+  Requirement:、Scenario:）与 SHALL/MUST 关键词保持英文。
+
+  项目：NaviRAG —— 完全本地离线的《艾尔登法环》攻略 RAG 问答系统。
+  技术栈：Python 3.13 + chromadb + sentence-transformers(CPU torch) + Ollama。
+  核心代码 core/retriever.py（路由 / 三路召回 / 实体分级 / 别名表 / 融合排序）。
+
+  ## 本仓库的既定约定（写提案和任务时必须遵守）
+
+  - **commit message 一律中文**。改动不论大小都单独提交，不攒批。
+  - **每次提交后同步推送到两个远端**：github=MaPleooo9/NaviRAG、
+    gitee=iKnowuHateme/navi-rag。推送后核对 `git ls-remote <remote> main`
+    与本地一致。
+  - **人工资产（data/elden_ring/l2_cheese.md / l3_normal.md）的验证状态只能由用户改**：
+    新打法由 AI 起草，`验证: 否` → `是` 必须等用户审阅后手动改，AI 不得自行标"已验证"。
+  - **追加打法条目的 `## 目标名 | English` 必须与已有条目逐字符一致**，
+    否则 build 后会被当成两个不同目标。
+  - **别名表 data/elden_ring/aliases.json 的 key 必须是检索器拆出的片段**
+    （core/retriever.target_names() 的输出，如「玛利喀斯」），不是 target 原文
+    （`“黑剑”玛利喀斯`）。写完整原文不会报错、只会静默失效。
+    改完必须跑 `python scripts/check_aliases.py --probe` 对账。
+  - **改别名是纯查询侧改动，不需要重建索引**；只有改打法 / 新增条目才需要。
+  - **评估口径**：data/elden_ring/eval_set.json，严格口径与宽松口径并列呈现；
+    指标由 `python scripts/eval_retrieval.py` 产出，报告数字不得手写。
+
+  ## 环境限制（会影响任务怎么设计）
+
+  - 本环境**批量删除大目录会被安全策略拦死**（shutil.rmtree / PowerShell
+    Add-Type / COM / SHFileOperationW 四条路径全废）。涉及清理大目录的任务，
+    只能设计成「mv 改名归并，交由用户手动删」。
+  - `dist/` 与 `build/` 在 .gitignore 里，exe 不进仓库、走 GitHub Release 分发。
+  - 打包 6 分钟量级，属长任务，任务描述里要注明。
+
+# 每个产物的额外规则
+rules:
+  proposal:
+    - 必须包含「Non-goals（不做什么）」一节，明确划出边界
+    - 提案控制在 600 字以内，背景只写与本次变更直接相关的部分
+  specs:
+    - 需求用 SHALL/MUST 写「可观察行为」，不写实现方式（实现方式属于 design）
+    - 每条 Requirement 至少配一个 Scenario，用 WHEN/THEN 写
+    - 只写本次变更涉及的增量（ADDED/MODIFIED/REMOVED），不要重抄整份规范
+  design:
+    - 只记架构决策与取舍理由（为什么选 A 不选 B），不重复 tasks 的步骤
+    - 涉及 core/retriever.py 的改动必须说明对检索指标的影响预期，以及怎么验证
+  tasks:
+    - 每条任务必须带「验收」与「验证方式」（跑哪条命令 / 看哪个指标）
+    - 涉及人工资产（L2/L3 打法、别名表）的任务，验收里必须写明
+      「等用户审阅后由用户改验证状态」，不得设计成 AI 自行判定
+    - 单条任务不超过 5 个文件，且必须可独立验证
+
+# apply / archive 阶段的行为指导
+operations:
+  apply:
+    guidance:
+      - 每完成一条任务就更新 tasks.md 的勾选状态，不要攒到最后一次性勾
+      - 改完 core/ 代码后跑 `python scripts/eval_retrieval.py`，确认指标无回归
+        （当前基线 Hit@1 94.1% / MRR 0.951），有回归必须如实报告而不是掩盖
+      - 提交用中文 message，提交后立即推双端
+  archive:
+    guidance:
+      - 归档前确认 openspec/specs/ 下的 delta 已正确合并
+      - 归档后在回复里用一句话总结「这次改了什么、指标有没有变、留了什么尾巴」
